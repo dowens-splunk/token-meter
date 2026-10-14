@@ -59,6 +59,11 @@ troubleshooting are in the [User guide](specs/USER_GUIDE.md).
 Runtimes: Claude Code and Desktop (Agent/Cowork), Codex CLI and desktop, Cursor
 Agent/Composer, OpenCode, Kiro, and Pi. Only sessions stored locally are visible.
 
+OpenCode's current storage (the `session_v2` tables OpenCode adopted in October
+2026) and older pre-V2 databases are both supported: Token Meter reads the V2
+store when present and falls back to the legacy tables otherwise. OpenCode
+databases are only ever opened read-only.
+
 ## Features
 
 ### Follow a session
@@ -162,6 +167,7 @@ Full details: [User guide](specs/USER_GUIDE.md#data-and-evidence) ·
 | Document | Covers |
 | --- | --- |
 | [User guide](specs/USER_GUIDE.md) | Setup, daily use, MCP, updates, troubleshooting |
+| [Cost estimates and budgets](specs/COST_AND_BUDGETS.md) | How reliable costs are, converting credits into agent budgets |
 | [Security](specs/SECURITY.md) | Privacy boundaries, vulnerability reporting |
 | [Architecture](specs/ARCHITECTURE.md) | Components, data flow, extension contracts |
 | [Contributing](specs/CONTRIBUTING.md) | Issues, pull requests, validation |

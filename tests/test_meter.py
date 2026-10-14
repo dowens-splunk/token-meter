@@ -1011,7 +1011,8 @@ class BuilderRecapStandalonePageTests(unittest.TestCase):
         self.assertEqual(page.count("function drawBuilderRecap("), 1)
         self.assertNotRegex(page, r'<(?:script|img|link)[^>]+(?:src|href)=["\']https?://')
         self.assertNotIn("foreignObject", page)
-        self.assertNotIn("localStorage", page)
+        # Only the shared theme boot script may read storage; the studio never persists builder input.
+        self.assertNotIn("localStorage", re.sub(r"<script id=theme-boot>.*?</script>", "", page, flags=re.S))
         self.assertNotIn("Display name", page)
         self.assertNotIn("id=spotlight", page)
         self.assertNotIn("id=include-git", page)
@@ -1094,7 +1095,7 @@ class BuilderRecapStandalonePageTests(unittest.TestCase):
         script = f"""
 const fs=require('fs'),page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
 function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0)throw Error(`missing ${{name}}`);let i=page.indexOf('{{',start),depth=0;for(;i<page.length;i++){{if(page[i]==='{{')depth++;else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);}}throw Error(`unclosed ${{name}}`);}}
-for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
+for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','cardPalette','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
 class Gradient{{constructor(kind,coords){{this.kind=kind;this.coords=coords;this.stops=[];}}addColorStop(offset,color){{this.stops.push([offset,color]);}}}}
 class Context{{constructor(){{this.ops=[];this.font='';}}fillRect(...v){{this.ops.push(['rect',this.fillStyle,...v]);}}fillText(...v){{this.ops.push(['text',String(v[0]),...v.slice(1),this.font]);}}drawImage(image,...v){{this.ops.push(['image',image.src,...v]);}}createLinearGradient(...c){{return new Gradient('linear',c);}}createRadialGradient(...c){{return new Gradient('radial',c);}}measureText(v){{const size=Number((/([0-9.]+)px/.exec(this.font)||[])[1])||14,narrow=/Narrow|Condensed/.test(this.font);return {{width:String(v).length*size*(narrow?.45:.55)}};}}beginPath(){{}}arc(){{}}stroke(){{}}save(){{}}restore(){{}}translate(){{}}rotate(){{}}}}
 class Canvas{{constructor(){{this.ctx=new Context();this.attrs={{}};}}getContext(){{return this.ctx;}}setAttribute(k,v){{this.attrs[k]=String(v);}}}}
@@ -1214,7 +1215,7 @@ console.log(JSON.stringify({{
         script = f"""
 const fs=require('fs'),page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
 function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0)throw Error(`missing ${{name}}`);let i=page.indexOf('{{',start),depth=0;for(;i<page.length;i++){{if(page[i]==='{{')depth++;else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);}}throw Error(`unclosed ${{name}}`);}}
-for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
+for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','cardPalette','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
 const stops={{addColorStop(){{}}}};
 class Context{{
  constructor(){{this.ops=[];this.font='';this.bands=[];}}
@@ -1262,7 +1263,7 @@ console.log(JSON.stringify({{
         script = f"""
 const fs=require('fs'),page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
 function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0)throw Error(`missing ${{name}}`);let i=page.indexOf('{{',start),depth=0;for(;i<page.length;i++){{if(page[i]==='{{')depth++;else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);}}throw Error(`unclosed ${{name}}`);}}
-for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
+for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','cardPalette','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap'])eval(extract(name));
 class Gradient{{constructor(kind){{this.kind=kind;this.stops=[];}}addColorStop(offset,color){{this.stops.push([offset,color]);}}}}
 class Context{{constructor(){{this.ops=[];this.font='';}}fillRect(...v){{this.ops.push(['rect',this.fillStyle,...v]);}}fillText(...v){{this.ops.push(['text',String(v[0]),...v.slice(1),this.font]);}}drawImage(){{}}createLinearGradient(){{return new Gradient('linear');}}createRadialGradient(){{return new Gradient('radial');}}measureText(v){{const size=Number((/([0-9.]+)px/.exec(this.font)||[])[1])||14,narrow=/Narrow|Condensed/.test(this.font);return {{width:String(v).length*size*(narrow?.45:.55)}};}}beginPath(){{}}arc(){{}}stroke(){{}}save(){{}}restore(){{}}translate(){{}}rotate(){{}}}}
 class Canvas{{constructor(){{this.ctx=new Context();this.attrs={{}};}}getContext(){{return this.ctx;}}setAttribute(k,v){{this.attrs[k]=String(v);}}}}
@@ -1296,7 +1297,7 @@ console.log(JSON.stringify({{
         script = f"""
 const fs=require('fs'),page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
 function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0)throw Error(`missing ${{name}}`);if(page.slice(start-6,start)==='async ')start-=6;let i=page.indexOf('{{',start),depth=0;for(;i<page.length;i++){{if(page[i]==='{{')depth++;else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);}}throw Error(`unclosed ${{name}}`);}}
-	for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap','hasActivity'])eval(extract(name));
+	for(const name of ['safeArray','sanitizeBuilderName','compactNumber','durationLabel','formatStat','formatSpend','ellipsize','fitText','gradientFill','radialFill','fillRoundedRect','setTracking','cardPalette','ditherRegion','supportingStats','drawUsageGroup','drawBuilderRecap','hasActivity'])eval(extract(name));
 class Gradient{{constructor(kind,coords){{this.kind=kind;this.coords=coords;this.stops=[];}}addColorStop(offset,color){{this.stops.push([offset,color]);}}}}
 class Context{{constructor(){{this.ops=[];this.font='';this.lineWidth=1;}}fillRect(...v){{this.ops.push(['rect',this.fillStyle,...v]);}}fillText(...v){{this.ops.push(['text',String(v[0]),...v.slice(1),this.font]);}}createLinearGradient(...c){{return new Gradient('linear',c);}}createRadialGradient(...c){{return new Gradient('radial',c);}}measureText(v){{const size=Number((/([0-9.]+)px/.exec(this.font)||[])[1])||14,narrow=/Narrow|Condensed/.test(this.font);return {{width:String(v).length*size*(narrow?.45:.55)}};}}beginPath(){{}}arc(...v){{this.ops.push(['arc',this.strokeStyle,...v]);}}stroke(){{this.ops.push(['stroke',this.strokeStyle,this.lineWidth]);}}save(){{}}restore(){{}}translate(){{}}rotate(){{}}}}
 class Canvas{{constructor(){{this.ctx=new Context();this.attrs={{}};this.width=1;this.height=1;}}getContext(){{return this.ctx;}}setAttribute(k,v){{this.attrs[k]=String(v);}}}}
@@ -2324,6 +2325,8 @@ class CursorTraceTests(unittest.TestCase):
         self.assertEqual(stats["executions"], 2)
         self.assertEqual(stats["token_covered_executions"], 1)
         self.assertEqual(stats["io_covered_executions"], 1)
+        self.assertEqual(stats["io_covered_input_tokens"], 100)
+        self.assertEqual(stats["io_covered_output_tokens"], 20)
         self.assertEqual(stats["cost_covered_executions"], 1)
         self.assertEqual(stats["cost_covered_output_tokens"], 20)
         self.assertAlmostEqual(stats["cost_covered_cost"], 0.1)
@@ -2334,6 +2337,9 @@ class CursorTraceTests(unittest.TestCase):
         self.assertFalse(aggregate["coverage"]["cost"]["complete"])
         self.assertFalse(aggregate["coverage"]["reasoning_tokens"]["complete"])
         self.assertEqual(aggregate["io_covered_executions"], 1)
+        self.assertEqual(aggregate["io_covered_input_tokens"], 100)
+        self.assertEqual(aggregate["io_covered_output_tokens"], 20)
+        self.assertEqual(aggregate["daily"][0]["io_covered_input_tokens"], 100)
         self.assertAlmostEqual(aggregate["cost_covered_cost"], 0.1)
 
     def test_usage_provenance_distinguishes_reported_estimated_and_mixed(self):
@@ -2810,6 +2816,8 @@ class ModelPerformanceTests(unittest.TestCase):
             "thinking_covered_executions": 0,
             "token_covered_executions": 2,
             "io_covered_executions": 2,
+            "io_covered_input_tokens": 230,
+            "io_covered_output_tokens": 50,
             "executions": 2,
             "input_evidence": True,
             "output_evidence": True,
@@ -6861,7 +6869,8 @@ function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0
 const appFilterGroup=s=>s.provider,projectFilterValue=p=>p||'';
 eval(['timeFilterBounds','agentIdentityPresentation','filterSubagentInventory','childRootId','localDateKey','dateKeyAgo','calendarMonthWindow','monthToDateWindow','modelRangeWindow','subagentRoleKey','subagentRoleDayRows','normalizedSubagentNavigationState'].map(extract).join('\\n'));
 eval(page.slice(page.indexOf('function allSessionsView('),page.indexOf('function allSessionsCountText(')));
-const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:'all',sort:'recent'}};
+const DEFAULT_TIME_FILTER_WINDOW='30d';
+const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:DEFAULT_TIME_FILTER_WINDOW,sort:'recent'}};
 const now=new Date(2026,9,5,12).getTime(),at=(...parts)=>new Date(...parts).getTime()/1000;
 const bounds=timeFilterBounds('last_month',now);
 const stamps={{current:at(2026,9,1,0,0,1),lastStart:at(2026,8,1),lastEnd:at(2026,8,30,23,59,59),prior:at(2026,7,31,23,59,59)}};
@@ -6886,7 +6895,7 @@ process.stdout.write(JSON.stringify({{
         self.assertEqual(payload["rolling"], 0)
         self.assertEqual(self.page.count(
             "<option value=today>Today</option><option value=yesterday>Yesterday</option>"
-            "<option value=7d>7 days</option><option value=30d>30 days</option>"
+            "<option value=7d>7 days</option><option value=30d selected>30 days</option>"
             "<option value=90d>90 days</option><option value=month>Month</option>"
             "<option value=last_month>Last month</option><option value=all>All history</option></select>"
         ), 2)
@@ -6902,7 +6911,7 @@ const appFilterGroup=s=>s.provider,projectFilterValue=p=>p||'';
 eval(page.slice(page.indexOf('const TIME_FILTER_WINDOWS='),page.indexOf('const DELIVERY_EVIDENCE_FILTERS=')).replace(/^const /gm,'var '));
 eval(['agentIdentityPresentation','filterSubagentInventory','childRootId','localDateKey','dateKeyAgo','calendarMonthWindow','monthToDateWindow','modelRangeWindow','subagentRoleKey','subagentRoleDayRows','normalizedSubagentNavigationState'].map(extract).join('\\n'));
 eval(page.slice(page.indexOf('function allSessionsView('),page.indexOf('function allSessionsCountText(')));
-const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:'all',sort:'recent'}};
+const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:DEFAULT_TIME_FILTER_WINDOW,sort:'recent'}};
 const now=new Date(2026,9,5,12).getTime(),at=(...parts)=>new Date(...parts).getTime()/1000;
 const stamps={{today:at(2026,9,5,0,0,1),yesterdayStart:at(2026,9,4),yesterdayEnd:at(2026,9,4,23,59,59),monthStart:at(2026,9,1),lastMonth:at(2026,8,30,23,59,59)}};
 const inventory=Object.entries(stamps).map(([id,last])=>({{id,root_session_id:'root',runtime:'codex',label:id,activity_state:'complete',last_activity_at:last,attention:[]}}));
@@ -6936,7 +6945,7 @@ process.stdout.write(JSON.stringify({{
         self.assertEqual(result["month"]["agents"], ["monthStart", "today", "yesterdayEnd", "yesterdayStart"])
         self.assertEqual(result["month"]["roleDays"], ["2026-10-01", "2026-10-04", "2026-10-05"])
         self.assertEqual(payload["migrated"], "today")
-        self.assertEqual(payload["invalid"], "all")
+        self.assertEqual(payload["invalid"], "30d")
         self.assertEqual(payload["restored"], "today")
         self.assertEqual(payload["restoredMonth"], "month")
         self.assertEqual(payload["labels"]["month"], "Month")
@@ -7061,10 +7070,11 @@ function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0
 const stored=new Map([['tm_subagent_filter_sort','elapsed']]),writes=[];
 const localStorage={{getItem:key=>stored.get(key)??null,setItem:(key,value)=>{{stored.set(key,String(value));writes.push([key,String(value)]);}}}};
 let subagentFilters;
+eval(page.slice(page.indexOf('const TIME_FILTER_WINDOWS='),page.indexOf('function normalizeTimeFilterWindow(')).replace(/^const /gm,'var '));
 const initStart=page.indexOf('let subagentFilters={{');
 const initEnd=page.indexOf('const SUBAGENT_PAGE_SIZE',initStart);
 eval(page.slice(initStart,initEnd).replace('let subagentFilters=','subagentFilters='));
-const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:'all',sort:'recent'}};
+const subagentFilterDefaults={{query:'',role:'',kind:'',runtime:'',project:'',model:'',status:'all',signal:'all',window:DEFAULT_TIME_FILTER_WINDOW,sort:'recent'}};
 eval(extract('normalizedSubagentNavigationState'));
 eval(extract('subagentActiveFilterItems'));
 const restored=normalizedSubagentNavigationState('sessions',{{sort:'elapsed'}});
@@ -7082,6 +7092,51 @@ process.stdout.write(JSON.stringify({{saved:subagentFilters.sort,stored:stored.g
         self.assertEqual(payload["chip"], {
             "key": "sort", "label": "Sort", "value": "Work time",
         })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_subagent_time_filter_defaults_to_thirty_days_and_labels_all_history(self):
+        script = f"""
+const fs=require('fs');
+const page=fs.readFileSync({json.dumps(str(Path(meter.__file__).with_name('page.html')))},'utf8');
+function extract(name){{let start=page.indexOf(`function ${{name}}(`);if(start<0)throw Error(`missing ${{name}}`);let i=page.indexOf('{{',start),depth=0;for(;i<page.length;i++){{if(page[i]==='{{')depth++;else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);}}throw Error(`unclosed ${{name}}`);}}
+eval(page.slice(page.indexOf('const TIME_FILTER_WINDOWS='),page.indexOf('function normalizeTimeFilterWindow(')).replace(/^const /gm,'var '));
+const initStart=page.indexOf('let subagentFilters={{'),initEnd=page.indexOf('const SUBAGENT_PAGE_SIZE',initStart);
+const defaultsLine=page.slice(page.indexOf('const subagentFilterDefaults='),page.indexOf('function persistSubagentFilter(')).replace(/^const /,'var ');
+const persistSource=extract('persistSubagentFilter'),chipsSource=extract('subagentActiveFilterItems');
+function load(entries){{
+ const stored=new Map(entries);
+ const localStorage={{getItem:key=>stored.get(key)??null,setItem:(key,value)=>stored.set(key,String(value)),removeItem:key=>stored.delete(key)}};
+ let subagentFilters;
+ eval(page.slice(initStart,initEnd).replace('let subagentFilters=','subagentFilters='));
+ eval(defaultsLine);
+ const subagentFilterStorage={{window:'tm_subagent_filter_time'}};
+ eval(persistSource);
+ const loaded=subagentFilters.window;
+ subagentFilters.window='all';persistSubagentFilter('window');const keptAll=stored.get('tm_subagent_filter_time')??null;
+ subagentFilters.window='30d';persistSubagentFilter('window');const atDefault=stored.get('tm_subagent_filter_time')??null;
+ return {{loaded,keptAll,atDefault,defaults:subagentFilterDefaults}};
+}}
+const fresh=load([]),bogus=load([['tm_subagent_filter_time','bogus']]),saved=load([['tm_subagent_filter_time','all']]);
+const subagentFilterDefaults=fresh.defaults;
+const appFilterLabel=row=>row.provider,projectFilterLabel=value=>value;
+eval(chipsSource);
+const chip=window=>subagentActiveFilterItems({{...subagentFilterDefaults,window}}).find(item=>item.key==='window')||null;
+process.stdout.write(JSON.stringify({{
+ fresh:fresh.loaded,bogus:bogus.loaded,saved:saved.loaded,keptAll:fresh.keptAll,atDefault:fresh.atDefault,
+ defaultChip:chip('30d'),allChip:chip('all'),sevenChip:chip('7d'),
+}}));
+"""
+        payload = json.loads(subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        ).stdout)
+        self.assertEqual(payload["fresh"], "30d")
+        self.assertEqual(payload["bogus"], "30d")
+        self.assertEqual(payload["saved"], "all")
+        self.assertEqual(payload["keptAll"], "all")
+        self.assertIsNone(payload["atDefault"])
+        self.assertIsNone(payload["defaultChip"])
+        self.assertEqual(payload["allChip"], {"key": "window", "label": "Time", "value": "All history"})
+        self.assertEqual(payload["sevenChip"], {"key": "window", "label": "Time", "value": "7 days"})
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_subagent_summary_tags_toggle_incomplete_and_attention_filters(self):
@@ -8524,7 +8579,20 @@ const zeroInput = efficiencyMetrics({
   cost_covered_cost:1,
   availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
 });
-console.log(JSON.stringify({complete,missing,partial,coveredZero,inputOnly,zeroInput}));
+const partialPaired = efficiencyMetrics({
+  input_tokens:600, output_tokens:15, cost:.1, executions:3,
+  token_covered_executions:3, io_covered_executions:2,
+  io_covered_input_tokens:100, io_covered_output_tokens:10,
+  coverage:{tokens:{complete:false}},
+  availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+const noPaired = efficiencyMetrics({
+  input_tokens:600, output_tokens:15, cost:.1, executions:3,
+  token_covered_executions:3, io_covered_executions:0,
+  io_covered_input_tokens:0, io_covered_output_tokens:0,
+  availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+console.log(JSON.stringify({complete,missing,partial,coveredZero,inputOnly,zeroInput,partialPaired,noPaired}));
 """
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, check=True,
@@ -8551,6 +8619,8 @@ console.log(JSON.stringify({complete,missing,partial,coveredZero,inputOnly,zeroI
         self.assertEqual(payload["coveredZero"]["output_per_dollar"], 0)
         self.assertIsNone(payload["inputOnly"]["output_per_dollar"])
         self.assertEqual(payload["zeroInput"]["context_load"], 0)
+        self.assertEqual(payload["partialPaired"]["context_load"], 10)
+        self.assertIsNone(payload["noPaired"]["context_load"])
 
     def test_efficiency_uses_one_range_for_overall_and_per_model_statistics(self):
         for marker in (
@@ -8697,7 +8767,7 @@ console.log(JSON.stringify({
         self.assertIn('id=e-reasoning-change', self.page)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
-    def test_efficiency_charts_smooth_daily_segments_and_default_to_seven_days(self):
+    def test_efficiency_charts_smooth_daily_segments_and_default_to_thirty_days(self):
         match = re.search(
             r"function efficiencyChartSmoothPath\(.*?\n\}", self.page, re.DOTALL,
         )
@@ -8720,9 +8790,11 @@ console.log(JSON.stringify({
             "smooth": "M0.0 50.0 C3.3 43.3 6.7 36.7 10.0 30.0 C13.3 23.3 16.7 16.7 20.0 10.0",
             "pair": "M0.0 50.0 L10.0 30.0",
         })
-        self.assertIn("let efficiencyRange=localStorage.getItem('tm_efficiency_range')||'7';", self.page)
-        self.assertIn("if(!EFFICIENCY_RANGES.includes(efficiencyRange))efficiencyRange='7';", self.page)
-        self.assertIn('<option value=7 selected>7 days</option>', self.page)
+        self.assertIn("let efficiencyRange=localStorage.getItem('tm_efficiency_range')||'30';", self.page)
+        self.assertIn("if(!EFFICIENCY_RANGES.includes(efficiencyRange))efficiencyRange='30';", self.page)
+        efficiency_range = self.page.split('id=e-range aria-label="Efficiency history range">', 1)[1].split("</select>", 1)[0]
+        self.assertIn('<option value=30 selected>30 days</option>', efficiency_range)
+        self.assertNotIn('<option value=7 selected>', efficiency_range)
         self.assertIn(
             "renderTrendDelta('e-reasoning-change',reasoningDelta,'down',!comparison);",
             self.page,
@@ -8756,6 +8828,8 @@ console.log(JSON.stringify({
   seven:{current:seven.current.days,prior:seven.prior.days,label:seven.label},
   increase:efficiencyPeriodDelta({output_per_dollar:125},{output_per_dollar:100},'output_per_dollar','yesterday'),
   unavailable:efficiencyPeriodDelta({output_per_dollar:25},{output_per_dollar:0},'output_per_dollar','yesterday'),
+  currentMissing:efficiencyPeriodDelta({context_load:null},{context_load:254},'context_load','prior 7 days'),
+  priorMissing:efficiencyPeriodDelta({context_load:12},{context_load:null},'context_load','prior 7 days'),
 }));
 """
         result = subprocess.run(
@@ -8788,6 +8862,8 @@ console.log(JSON.stringify({
             },
             "increase": {"text": "↑ 25.0% vs yesterday", "direction": "up"},
             "unavailable": {"text": "No comparable prior period", "direction": ""},
+            "currentMissing": {"text": "No comparable prior period", "direction": ""},
+            "priorMissing": {"text": "No comparable prior period", "direction": ""},
         })
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
@@ -9697,7 +9773,8 @@ console.log(JSON.stringify(groups.map(group => colors.get(group.key))));
             "const MODEL_RANGES=['today','yesterday','7','30','90','month','last_month','all'];",
             "const EFFICIENCY_RANGES=['today','yesterday','7','30','90','month','last_month','all'];",
             "const DELIVERY_RANGES=['today','yesterday','7','30','90','month','last_month'];",
-            "if(!DELIVERY_RANGES.includes(deliveryRange)){deliveryRange='7';localStorage.setItem('tm_delivery_range',deliveryRange);}",
+            "let deliveryRange=localStorage.getItem('tm_delivery_range')||'30';",
+            "if(!DELIVERY_RANGES.includes(deliveryRange)){deliveryRange='30';localStorage.setItem('tm_delivery_range',deliveryRange);}",
             "if(!MODEL_RANGES.includes(modelRange))",
             "function modelRangeWindow(range,now=new Date())",
             "if(range==='today'||range==='yesterday')",
@@ -9784,6 +9861,32 @@ console.log(JSON.stringify(groups.map(group => colors.get(group.key))));
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("$('model-pricing-settings').scrollIntoView", self.page)
 
+    def test_model_pricing_groups_rows_by_provider_tabs_in_a_bounded_scroll(self):
+        pricing = self.page.split("id=model-pricing-settings", 1)[1].split(
+            "id=delivery-settings", 1,
+        )[0]
+        self.assertIn('id=model-price-tabs role=tablist', pricing)
+        self.assertIn('id=model-price-table-wrap', pricing)
+        self.assertLess(
+            pricing.index("id=model-price-tabs"),
+            pricing.index("id=model-pricing-rows"),
+        )
+        for marker in (
+            "function renderModelPriceTabs",
+            "function applyModelPriceTab",
+            "function selectModelPriceTab",
+            'data-model-price-provider="${esc(row.provider)}"',
+            "root.dataset.modelPriceProvider!==modelPricingTab",
+            "modelPricingSelected.has(modelPriceKey(row.provider,row.model))",
+            "event.key==='ArrowRight'",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertRegex(
+            self.page,
+            r"\.modelPriceTableWrap\{overflow:auto;max-height:min\(460px,58vh\)",
+        )
+        self.assertIn(".modelPriceTable tr[hidden]{display:none!important}", self.page)
+
     def test_model_pricing_uses_explicit_row_selection_without_an_actions_column(self):
         pricing = self.page.split("id=model-pricing-settings", 1)[1].split(
             "id=delivery-settings", 1,
@@ -9842,7 +9945,11 @@ console.log(JSON.stringify([
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_settings_polling_pauses_while_the_user_is_selecting_or_editing(self):
         functions = []
-        for name in ("settingsInteractionActive", "renderSettings"):
+        for name in ("settingsInteractionActive", "budgetInteractionActive"):
+            match = re.search(rf"^function {name}\(\)\{{[^\n]*\}}\n", self.page, re.MULTILINE)
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        for name in ("viewInteractionActive", "renderSettings", "renderSpendView"):
             match = re.search(
                 rf"^function {name}\(.*?^\}}\n",
                 self.page,
@@ -9852,54 +9959,50 @@ console.log(JSON.stringify([
             functions.append(match.group(0))
         script = """
 let settingsPointerActive=false;
-const view={contains:node=>Boolean(node?.insideSettings)};
-const field={insideSettings:true,matches:selector=>selector.includes('input')};
-const outside={insideSettings:false,matches:()=>false};
+let region='settings';
+const view={contains:node=>Boolean(node?.inside===region&&region==='settings')};
+const budgetView={contains:node=>Boolean(node?.inside===region&&region==='budgets')};
+const field={get inside(){return region;},matches:selector=>selector.includes('input')};
+const outside={inside:null,matches:()=>false};
 let activeElement=outside;
 let selection={isCollapsed:true,rangeCount:0,anchorNode:null,focusNode:null};
 const document={get activeElement(){return activeElement;}};
 const window={getSelection:()=>selection};
-const $=id=>id==='view-settings'?view:null;
+const $=id=>id==='view-settings'?view:id==='spend-budgets'?budgetView:null;
 let calls=[];
 const renderBudgets=()=>calls.push('budgets');
 const renderModelPricing=()=>calls.push('pricing');
+const renderSpend=()=>calls.push('spend');
+function render(){renderSettings(xs);renderSpendView(xs);}
 """ + "\n".join(functions) + """
 const xs={model_pricing:{}};
-activeElement=field;
-const focused=settingsInteractionActive();
-renderSettings(xs);
-const focusedCalls=[...calls];
-calls=[];
-activeElement=outside;
-selection={isCollapsed:false,rangeCount:1,anchorNode:{insideSettings:true},focusNode:{insideSettings:true}};
-const selected=settingsInteractionActive();
-renderSettings(xs);
-const selectedCalls=[...calls];
-calls=[];
-selection={isCollapsed:true,rangeCount:0,anchorNode:null,focusNode:null};
-settingsPointerActive=true;
-const dragging=settingsInteractionActive();
-renderSettings(xs);
-const draggingCalls=[...calls];
-calls=[];
-settingsPointerActive=false;
-selection={isCollapsed:true,rangeCount:1,anchorNode:{insideSettings:true},focusNode:{insideSettings:true}};
-const idle=settingsInteractionActive();
-renderSettings(xs);
-console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging,draggingCalls,idle,idleCalls:calls}));
+const out={};
+for(const where of ['settings','budgets']){
+ region=where;
+ activeElement=field;
+ calls=[];render();out[where+'Focused']=[...calls];
+ activeElement=outside;
+ selection={isCollapsed:false,rangeCount:1,anchorNode:{inside:where},focusNode:{inside:where}};
+ calls=[];render();out[where+'Selected']=[...calls];
+ selection={isCollapsed:true,rangeCount:0,anchorNode:null,focusNode:null};
+ settingsPointerActive=true;
+ calls=[];render();out[where+'Dragging']=[...calls];
+ settingsPointerActive=false;
+}
+calls=[];render();out.idle=[...calls];
+console.log(JSON.stringify(out));
 """
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, check=True,
         )
         self.assertEqual(json.loads(result.stdout), {
-            "focused": True,
-            "focusedCalls": [],
-            "selected": True,
-            "selectedCalls": [],
-            "dragging": True,
-            "draggingCalls": [],
-            "idle": False,
-            "idleCalls": ["budgets", "pricing"],
+            "settingsFocused": ["spend", "budgets"],
+            "settingsSelected": ["spend", "budgets"],
+            "settingsDragging": ["spend"],
+            "budgetsFocused": ["pricing", "spend"],
+            "budgetsSelected": ["pricing", "spend"],
+            "budgetsDragging": ["spend"],
+            "idle": ["pricing", "spend", "budgets"],
         })
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
@@ -10030,10 +10133,10 @@ console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging
         self.assertNotIn("id=learn-glossary", self.page)
         self.assertIn("Review loop", self.page)
         self.assertIn("if(h==='daily')setHashRoute('spend',{replace:true,apply:false})", self.page)
-        self.assertIn("if(h==='spend'||h==='daily')", self.page)
+        self.assertIn("if(h==='spend'||h==='daily'||h==='spend-budgets'||h==='settings-budgets'||h==='budgets')", self.page)
         self.assertIn("if(h==='learn'||h==='learn-agent-access')", self.page)
-        self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
-        self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
+        self.assertIn("if(h==='settings-budgets'||h==='budgets')setHashRoute('spend-budgets',{replace:true,apply:false})", self.page)
+        self.assertNotIn("setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'center'})", self.page)
 
     def test_spend_route_and_shell_replace_daily_brief(self):
@@ -10047,7 +10150,7 @@ console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging
             "id=s-top-runtime", "id=s-highest-day", "id=s-chart",
             "id=s-chart-tip", "id=s-legend", "id=s-platforms",
             "if(h==='daily')setHashRoute('spend',{replace:true,apply:false})",
-            "if(h==='spend'||h==='daily')",
+            "if(h==='spend'||h==='daily'||h==='spend-budgets'",
             "openTopLevelRoute('spend')",
             "{id:'spend',label:'Spend'",
             "data-learn-route=spend>Open Spend",
@@ -10260,7 +10363,7 @@ console.log(JSON.stringify({
             "// spend-range-logic-start",
             "const SPEND_RUNTIME_COLORS={claude:'var(--provider-claude)',codex:'var(--provider-codex)',cursor:'var(--provider-cursor)',opencode:'var(--provider-opencode)',kiro:'var(--provider-kiro)',unknown:'var(--provider-other)'};",
             "function spendRangeWindow(range,from='',to='',now=new Date(),earliest='')",
-            "<select class=filterSelect id=s-range aria-label=\"Spend history range\"><option value=today>Today</option><option value=yesterday>Yesterday</option><option value=7>7 days</option><option value=30>30 days</option><option value=90>90 days</option><option value=month>Month</option><option value=last_month>Last month</option><option value=all>All history</option><option value=custom>Custom</option></select>",
+            "<select class=filterSelect id=s-range aria-label=\"Spend history range\"><option value=today>Today</option><option value=yesterday>Yesterday</option><option value=7>7 days</option><option value=30 selected>30 days</option><option value=90>90 days</option><option value=month>Month</option><option value=last_month>Last month</option><option value=all>All history</option><option value=custom>Custom</option></select>",
             "$('s-range').value=spendRangeChoice;",
             "$('s-range').onchange=event=>{",
             "function normalizeSpendRangeChoice(value)",
@@ -10330,7 +10433,7 @@ console.log(JSON.stringify({
         })
         self.assertEqual(
             payload["savedRanges"],
-            ["today", "yesterday", "7", "30", "90", "month", "last_month", "all", "custom", "7"],
+            ["today", "yesterday", "7", "30", "90", "month", "last_month", "all", "custom", "30"],
         )
         self.assertEqual(payload["yesterday"], {
             "valid": True, "start": "2026-08-11", "end": "2026-08-11",
@@ -10425,7 +10528,7 @@ console.log(JSON.stringify({
             "models": ["Cost, speed, and context."],
             "learn": ["The Token Meter review loop."],
             "capabilities": ["Tools, MCP servers, and skills."],
-            "settings": ["Budgets, connections, pricing, and updates."],
+            "settings": ["Connections, pricing, and updates."],
         }
         boundaries = (
             ("models", "daily"),
@@ -10500,24 +10603,29 @@ console.log(JSON.stringify({
         )
         self.assertIn("ratio.dataset.tip=detail", self.page)
 
-    def test_settings_monthly_budget_derives_total_from_runtime_budgets(self):
+    def test_spend_monthly_budget_derives_total_from_runtime_budgets(self):
         for marker in (
-            "id=budget-settings", "data-settings-target=budget-settings",
+            "id=spend-budgets", "class=spendBudgetSection", "class=spendBudgetEditor",
             "id=budget-spend", "id=budget-total", "id=budget-remaining",
-            "id=budget-projected", "id=budget-runtimes", "id=budget-bars",
+            "id=budget-projected", "id=budget-runtimes",
             "id=budget-progress-markers", "id=budget-allocation-note",
             "id=budget-plan-jump",
             "class=budgetDashboard", "class=budgetLeadHeadActions",
-            "class=\"card pad budgetLead\"",
+            "class=\"card budgetLead\"",
             "class=\"card pad budgetRuntimeCard budgetConfig\"",
-            "class=budgetLeadBody", "class=budgetDetailGrid",
-            "class=budgetSpendSummary", "class=budgetSpendLimit",
-            "class=budgetReadouts", "class=budgetRuntimeValue",
+            "class=budgetLeadBody",
+            "class=budgetLeadTop", "class=budgetFigureLine",
+            "id=budget-spend-qualifier hidden>At least</span>",
+            "class=budgetStats", "class=budgetMeterFoot", "id=budget-month",
+            "$('budget-spend-qualifier').hidden=!status.lower_bound",
+            "$('budget-spend').textContent=wholeMoney(status.spend||0)",
+            "const wholeMoney=n=>",
+            "function budgetMonthLabel(month)",
+            "class=budgetRuntimeValue",
             "class=budgetRuntimeTrack",
             "class=budgetFormGroup", "class=budgetAlertInline",
             "class=\"budgetForm budgetInlineForm\"",
             "class=budgetRuntimeHead", "class=budgetRuntimeInput",
-            "class=budgetChartInner", "class=budgetTarget",
             "id=budget-input-claude", "id=budget-input-codex",
             "id=budget-input-cursor", "id=budget-input-opencode",
             "id=budget-input-threshold-early",
@@ -10529,14 +10637,18 @@ console.log(JSON.stringify({
             "id=budget-runtime-track-opencode",
             "/settings/budgets", "tm_monthly_budget_alerts",
             "Partial cost coverage: recorded spend is a lower bound.",
-            "Calculated budget",
             "The sum of the registered runtime budgets.",
             "Runtime budgets are added to calculate the monthly total.",
             "function ensureBudgetRuntimeRows()",
-            "planJump.textContent=configured?'Edit budgets':'Set budgets'",
+            "planJump.textContent=open?'Close editor':budgetConfigured?'Edit budgets':'Set budgets'",
+            "planJump.setAttribute('aria-expanded',String(open))",
+            "aria-expanded=false aria-controls=budget-config>Set budgets</button>",
+            "$('budget-plan-jump').onclick=()=>setBudgetEditorOpen($('budget-config').hidden,true)",
             "config.scrollIntoView({behavior:",
-            "const config=$('budget-config'),input=config.querySelector('.budgetRuntimeInput input')",
+            "const input=config.querySelector('.budgetRuntimeInput input')",
             "input.focus({preventScroll:true})",
+            ".budgetConfig[hidden]{display:none}",
+            ".spendBudgetSection .budgetRuntimeFields{grid-column:2;grid-row:2}",
             "function budgetAllocationsFromInputs()",
             "function previewCalculatedBudget()",
             "const payload={currency:'USD',default_session_budget:",
@@ -10544,8 +10656,6 @@ console.log(JSON.stringify({
             "Save budgets",
             "Set budgets</h2>",
             "Spent this month</span><span>Budget (USD)",
-            "@media(min-width:901px){.budgetDetailGrid{align-items:stretch}",
-            ".budgetHistory .budgetChartInner{flex:1;display:grid",
             "DEFAULT_RUNTIME_BUDGET=0",
             "value=0",
         ):
@@ -10565,11 +10675,22 @@ console.log(JSON.stringify({
         self.assertNotIn("Runtime allocations cannot exceed", self.page)
         self.assertNotIn("budget-runtime-meta-", self.page)
         self.assertNotIn("const meta=allocated?", self.page)
-        self.assertEqual(self.page.count(" id=budget-config>"), 1)
-        settings = self.page[self.page.index("id=view-settings"):]
-        self.assertLess(settings.index("class=budgetDetailGrid"), settings.index("id=budget-config"))
-        self.assertLess(settings.index(">Monthly spend</h2>"), settings.index("id=budget-config"))
-        self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
+        self.assertEqual(self.page.count(" id=budget-config hidden>"), 1)
+        for removed in ("class=budgetSpendSummary", "class=budgetSpendLimit", "class=budgetReadouts>"):
+            self.assertNotIn(removed, self.page)
+        for removed in (
+            "id=budget-bars", "id=budget-history-note", ">Monthly spend</h2>",
+            "class=budgetDetailGrid", "budgetHistory", "budgetChartInner",
+            "data-settings-target=budget-settings",
+        ):
+            self.assertNotIn(removed, self.page)
+        self.assertNotRegex(self.page, r"id=budget-settings[\s>]")
+        spend = self.page.split("id=view-daily", 1)[1].split("id=view-efficiency", 1)[0]
+        self.assertLess(spend.index("<h1>Spend</h1>"), spend.index("id=spend-budgets"))
+        self.assertLess(spend.index("id=spend-budgets"), spend.index("class=spendKpis"))
+        self.assertLess(spend.index("class=\"card budgetLead\""), spend.index("id=budget-config"))
+        settings = self.page.split("id=view-settings", 1)[1]
+        self.assertNotIn("id=budget-form", settings)
 
     def test_software_updates_keep_checks_and_install_preferences_independent(self):
         for marker in (
@@ -10631,7 +10752,6 @@ console.log(JSON.stringify({
             "</div>\n</div>\n<dialog class=commandPalette", 1
         )[0]
         for title, target in (
-            ("Monthly budget", "budget-settings"),
             ("Agent connection", "agent-access"),
             ("Model pricing", "model-pricing-settings"),
             ("Software updates", "update-settings"),
@@ -10640,6 +10760,7 @@ console.log(JSON.stringify({
                 f"data-settings-target={target}><b>{title}</b>", settings,
             )
             self.assertIn(f">{title}</h2>", settings)
+        self.assertNotIn(">Monthly budget</", settings)
         for removed in (
             "id=agent-access-badge", "class=mcpMark", "class=agentPromise",
             "class=agentTools", "class=agentPrivacy", "id=frustration-term-count",
@@ -10660,7 +10781,8 @@ console.log(JSON.stringify({
             "id=current-budget-warning",
             "id=current-budget-warning-msg",
             "id=current-budget-settings",
-            "Open budget settings",
+            "Open monthly budget",
+            "$('current-budget-settings').onclick=()=>setHashRoute('spend-budgets')",
             "function renderCurrentBudgetWarning(status)",
             "status?.exceeded_runtimes||[]",
             "renderCurrentBudgetWarning(s.xsession?.budget||LATEST?.xsession?.budget)",
@@ -10679,11 +10801,10 @@ console.log(JSON.stringify({
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit9'",
+            "const NAV_COMMANDS=[",
             "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
             "event.key==='Enter'",
             "class=tabs aria-label=\"Primary navigation\"",
-            "button.dataset.label} · Shortcut: Option+${shortcut}",
             "button.setAttribute('aria-current','page')",
         ):
             self.assertIn(marker, self.page)
@@ -10705,29 +10826,22 @@ console.log(JSON.stringify({
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
 
-    def test_top_level_shortcuts_follow_visible_rail_order(self):
-        expected = [
-            ("session", "1"), ("daily", "2"), ("models", "3"),
-            ("subagents", "4"), ("efficiency", "5"), ("git", "6"),
-            ("learn", "7"), ("capabilities", "8"), ("settings", "9"),
-        ]
-        for tab_id, digit in expected:
+    def test_top_level_pages_have_no_numbered_shortcuts(self):
+        for tab_id in (
+            "session", "daily", "models", "subagents", "efficiency",
+            "git", "learn", "capabilities", "settings",
+        ):
             match = re.search(rf'<button[^>]+id=tab-{tab_id}[^>]*>.*?</button>', self.page)
             self.assertIsNotNone(match, tab_id)
             button = match.group(0)
-            self.assertIn(f'aria-keyshortcuts="Alt+{digit}"', button)
-            self.assertIn(f'Shortcut: Option+{digit}', button)
-            self.assertIn(f'<span class=tabShortcut aria-hidden=true>{digit}</span>', button)
-        commands = self.page.split("const NAV_COMMANDS=[", 1)[1].split("];", 1)[0]
-        for command_id, digit in (
-            ("sessions", "1"), ("spend", "2"), ("models", "3"),
-            ("subagents", "4"), ("efficiency", "5"), ("git", "6"),
-            ("learn", "7"), ("capabilities", "8"), ("settings", "9"),
-        ):
-            self.assertRegex(
-                commands,
-                rf"id:'{command_id}'.*?directKey:'Digit{digit}'.*?glyph:'{digit}'",
-            )
+            self.assertNotIn("aria-keyshortcuts", button)
+            self.assertNotIn("Shortcut", button)
+            self.assertNotIn("tabShortcut", button)
+        for marker in ("directKey", "tabShortcut", "Shortcut: Option+", "event.code"):
+            self.assertNotIn(marker, self.page)
+        perf = Path(__file__).resolve().parents[1].joinpath("performance.html").read_text(encoding="utf-8")
+        for marker in ("aria-keyshortcuts", "data-shortcut-digit", "railShortcut", "Shortcut: Option+", "event.code"):
+            self.assertNotIn(marker, perf)
 
     def test_tools_is_in_the_secondary_rail_above_settings(self):
         secondary = self.page.split("<div class=navSecondary>", 1)[1].split(
@@ -10794,7 +10908,7 @@ console.log(JSON.stringify({
         self.assertIn("short:'Efficiency'", steps)
         self.assertIn("short:'Monthly budget'", steps)
         self.assertIn("route:'efficiency'", steps)
-        self.assertIn("route:'settings-budgets'", steps)
+        self.assertIn("route:'spend-budgets'", steps)
         for marker in (
             "const ONBOARDING_KEY='tm_onboarding_v1'",
             "raw.completed.filter(id=>ONBOARDING_STEP_IDS.has(id))",
@@ -10805,13 +10919,12 @@ console.log(JSON.stringify({
             "complete?'Replay onboarding':'Resume onboarding'",
             "action:'onboarding'",
             "command.action==='onboarding'",
-            "function runNavigationCommand(command,{source='palette'}={})",
+            "function runNavigationCommand(command)",
             "function openOnboardingLesson(id)",
             "function finishOnboardingLesson()",
             "if(id)commitOnboardingSteps([id]);",
             "setTimeout(()=>openOnboardingLesson(step.id),0)",
             "if(lessonDialog.open&&event.key==='Escape')",
-            "runNavigationCommand(command,{source:'shortcut'})",
         ):
             self.assertIn(marker, self.page)
         resume = self.page.split("function resumeOrRestartOnboarding(){", 1)[1].split(
@@ -10842,7 +10955,7 @@ console.log(JSON.stringify({
             ("Spend review", "spend", "Open Spend"),
             ("Model comparison", "models", "Open Models"),
             ("Efficiency review", "efficiency", "Open Efficiency"),
-            ("Monthly budget", "settings-budgets", "Open Budgets"),
+            ("Monthly budget", "spend-budgets", "Open Budgets"),
         ):
             self.assertIn(title, learn)
             self.assertIn(f"data-learn-route={route}>{action}", learn)
@@ -10872,7 +10985,10 @@ console.log(JSON.stringify({
         self.assertIn("tm_global_time", self.page)
         self.assertIn("renderAllSessionStats(view.statsRows)", self.page)
         self.assertIn("session.model_stats", self.page)
-        self.assertIn("globalSearch='';globalApp='';globalProject='';globalTime='all'", self.page)
+        self.assertIn("let globalTime=localStorage.getItem('tm_global_time')||DEFAULT_TIME_FILTER_WINDOW;", self.page)
+        self.assertIn("globalSearch='';globalApp='';globalProject='';globalTime=DEFAULT_TIME_FILTER_WINDOW", self.page)
+        self.assertIn("if(key==='time'){globalTime=DEFAULT_TIME_FILTER_WINDOW;", self.page)
+        self.assertIn("globalTime!==DEFAULT_TIME_FILTER_WINDOW&&['time',", self.page)
         self.assertIn("['tm_global_search','tm_global_app','tm_global_project','tm_global_time']", self.page)
         self.assertIn("fetch('/logs',{cache:'no-store'})", self.page)
         self.assertIn("allSessionInventory?mergeAllSessionInventory(allSessionInventory,xs.sessions)", self.page)
@@ -10894,7 +11010,7 @@ console.log(JSON.stringify({
             "const hasChildren=childAgentsFor(s).length>0;",
             "const compareIndex=compareIds.indexOf(rowKey);",
             "className=`srow${active?' active':''}${live?' live':''}${hasChildren?' hasChildren':''}${compareIndex>=0?' compareSelected':''}`",
-            ".srow.active,.srow.live{border-color:rgb(var(--cyan-rgb)/.62)",
+            ".srow.active,.srow.live{border-color:rgb(var(--signal-rgb)/.62)",
             "const existing=new Map([...root.children]",
             "if(row.className!==className)row.className=className",
             "if(row.getAttribute('aria-label')!==ariaLabel)",
@@ -11174,9 +11290,9 @@ console.log(JSON.stringify({
             "const outputPerDollar=row.output_per_dollar==null?'--':compactNumber(row.output_per_dollar)+(estimate||row.token_estimate?' est':'');",
             self.page,
         )
-        self.assertIn(".currentSessionMetrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))", self.page)
+        self.assertIn(".currentSessionMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.page)
         self.assertIn(
-            "body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:1.02fr .9fr 1.18fr 1fr;gap:0;margin-top:24px;padding-top:18px",
+            "body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:.9fr 1.2fr 1fr;gap:0;margin-top:14px;padding-top:14px",
             self.page,
         )
         self.assertIn(
@@ -11933,7 +12049,7 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             "Local token efficiency.",
             "Pushed code &times; covered spend.",
             "The Token Meter review loop.",
-            "Budgets, connections, pricing, and updates.",
+            "Connections, pricing, and updates.",
         ):
             self.assertIn(marker, self.page)
         self.assertEqual(self.page.count("data-page-signal="), 9)
@@ -11994,8 +12110,7 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
 
     def test_collapsed_navigation_keeps_session_scope_labels_visible(self):
         self.assertIn(
-            "body.spectrumApp .top .brandCopy,body.spectrumApp .top .tabLabel,"
-            "body.spectrumApp .top .tabShortcut{display:none}",
+            "body.spectrumApp .top .brandCopy,body.spectrumApp .top .tabLabel{display:none}",
             self.page,
         )
         self.assertIn("body.spectrumApp .top .brandCopy{display:grid}", self.page)
@@ -12030,6 +12145,65 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
         self.assertIn("renderCurrentDaySummary(state?.xsession);", self.page)
         self.assertIn(".currentDayReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.page)
         self.assertIn(".currentDayMetric:nth-child(3){grid-column:1/-1", self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_readouts_compare_against_prior_days_and_never_invent_baselines(self):
+        functions = []
+        for name in ("localDayKey", "typicalComparison", "typicalCaption", "readoutScaleHtml", "dailyBaseline"):
+            match = re.search(rf"^function {name}\(.*?^\}}\n", self.page, re.MULTILINE | re.DOTALL)
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        medians = re.search(r"^const medianOf=.*$", self.page, re.MULTILINE)
+        self.assertIsNotNone(medians)
+        script = """
+const esc=s=>String(s??'');
+const money=n=>'$'+Number(n||0).toFixed(2);
+const pct=n=>Math.round((n||0)*100)+'%';
+const waitFmt=n=>Math.round(n)+'s';
+const metricAvailable=(row,metric)=>row?.availability?.[metric]!==false;
+const metricPartial=(row,metric)=>row?.coverage?.[metric]?.complete===false;
+const hasLocalEstimate=row=>row?.usage_basis==='local_estimate';
+""" + medians.group(0) + "\n" + "".join(functions) + """
+const days=[
+ {day:'2026-10-13',sessions:9,cost:50},
+ {day:'2026-10-12',sessions:2,cost:2},
+ {day:'2026-10-11',sessions:4,cost:4},
+ {day:'2026-10-10',sessions:6,cost:6,coverage:{cost:{complete:false}}},
+ {day:'2026-10-09',sessions:0,cost:0},
+ {day:'2026-08-01',sessions:30,cost:900},
+];
+const baseline=dailyBaseline(days,'2026-10-13');
+console.log(JSON.stringify({
+ baseline,
+ empty:dailyBaseline([], '2026-10-13'),
+ above:typicalCaption(6,2,'your typical day','$2.00'),
+ below:typicalCaption(1,4,'your typical day','$4.00'),
+ near:typicalCaption(2.1,2,'your typical day','$2.00'),
+ none:typicalCaption(0,2,'your typical day','$2.00'),
+ missing:typicalCaption(3,null,'your typical day',''),
+ scale:readoutScaleHtml({value:6,typical:2,label:'x'}),
+ calm:readoutScaleHtml({value:6,typical:2,toned:false}),
+ noScale:readoutScaleHtml({value:6,typical:0}),
+}));
+"""
+        result = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+        # Today, the partial-cost day, idle days, and days older than 30 days stay out of the baseline.
+        self.assertEqual(result["baseline"]["days"], 3)
+        self.assertEqual(result["baseline"]["typicalCost"], 3)
+        self.assertEqual(result["baseline"]["highCost"], 4)
+        self.assertEqual(result["baseline"]["typicalSessions"], 4)
+        self.assertEqual(result["baseline"]["sessionCost"], 1)
+        self.assertIsNone(result["empty"]["typicalCost"])
+        self.assertIsNone(result["empty"]["sessionCost"])
+        self.assertEqual(result["above"], "3.0× your typical day of $2.00")
+        self.assertEqual(result["below"], "75% below your typical day of $4.00")
+        self.assertEqual(result["near"], "In line with your typical day of $2.00")
+        self.assertEqual(result["none"], "Nothing yet · your typical day is $2.00")
+        self.assertEqual(result["missing"], "")
+        self.assertIn('data-tone="high"', result["scale"])
+        self.assertIn("--at:90.9%;--typ:30.3%", result["scale"])
+        self.assertIn('data-tone=""', result["calm"])
+        self.assertEqual(result["noScale"], "")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_sessions_month_spend_action_selects_and_persists_month_before_routing(self):
@@ -12188,7 +12362,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             ">Context in use</div><div class=\"v mono\" id=ov-context>",
             ">Context in use</div><div class=\"v mono\" id=preview-context>",
             "cacheSavingsAvailable?money(cache.saved||s.cache_saved||0):'--'",
-            "const cardDescription=`${contextSpark.summary}",
+            "const cardDescription=`${heroCaption?heroCaption+'. ':''}${contextSpark.summary}",
         ):
             self.assertIn(marker, self.page)
         self.assertNotIn("const values=windowSize?plotted.map(value=>value/windowSize):plotted", self.page)
@@ -12245,13 +12419,14 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "session-spectrum-field-v2",
             "THESIS: Sessions are live instruments",
             "<body class=spectrumApp>",
-            "--cyan:#00bceb",
-            "--blue:#1ba0e1",
-            "--sky:#7fdbf2",
-            "--violet:#c7a7ff",
+            ":root,[data-theme=classic]{",
+            "--signal:#00bceb",
+            "--signal-mid:#1ba0e1",
+            "--signal-hi:#7fdbf2",
+            "--aura:#c7a7ff",
             "--orange:#ffb457",
             "body.sessionRoute{",
-            "--session-cyan:var(--cyan)",
+            "--session-signal:var(--signal)",
             'class="previewHead spectrumPageHead sessionFlowHead"',
             'class="previewHeadCopy spectrumPageHeadCopy"',
             ".spectrumPageHead:before",
@@ -12351,7 +12526,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
         for marker in (
             "$('tab-session').onclick=()=>{window.scrollTo(0,0);openCurrentSessions();};",
             "label:'Sessions'",
-            "action:'sessions',directKey:'Digit1'",
+            "action:'sessions'}",
             "setHashRoute('sessions',{replace:true,apply:false})",
             "const CURRENT_SESSION_ORDER_KEY='tm_current_session_order_v1'",
             "const CURRENT_SESSION_ORDER_MIGRATION_KEY='tm_current_session_newest_first_v1'",
@@ -18121,6 +18296,81 @@ class OpenCodeTests(unittest.TestCase):
         self.assertIsNone(roles["ses_prose"])
         self.assertNotIn("passwd", json.dumps(roles))
 
+    def test_child_activity_state_follows_opencode_finish_reason(self):
+        """A recorded `finish: stop` completes a run; recency alone never does."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            base = 1_784_548_900_000
+            now_ms = int(time.time() * 1000)
+            parent = self._session_row("ses_top", "/repo", "Root", "model-a",
+                                       0.5, 100, 20, 0, 0, 0, base)
+            done = self._session_row("ses_done", "/repo", "Done", "model-a",
+                                     0.1, 10, 5, 0, 0, 0, base + 1000,
+                                     parent_id="ses_top", agent="gsd-executor")
+            stopped = self._session_row("ses_stop", "/repo", "Stopped", "model-a",
+                                        0.1, 10, 5, 0, 0, 0, base + 2000,
+                                        parent_id="ses_top", agent="gsd-executor")
+            resumed = self._session_row("ses_resumed", "/repo", "Resumed", "model-a",
+                                        0.1, 10, 5, 0, 0, 0, base + 3000,
+                                        parent_id="ses_top", agent="gsd-executor")
+            unfinished = self._session_row("ses_open", "/repo", "Open", "model-a",
+                                           0.1, 10, 5, 0, 0, 0, base + 4000,
+                                           parent_id="ses_top", agent="gsd-executor")
+            live = self._session_row("ses_live", "/repo", "Live", "model-a",
+                                     0.1, 10, 5, 0, 0, 0, now_ms,
+                                     parent_id="ses_top", agent="gsd-executor")
+            truncated = self._session_row("ses_trunc", "/repo", "Truncated",
+                                          "model-a",
+                                          0.1, 10, 5, 0, 0, 0, base + 5000,
+                                          parent_id="ses_top", agent="gsd-executor")
+            self._insert_sessions(
+                conn, (parent, done, stopped, resumed, unfinished, live, truncated),
+            )
+            for mid, sid, created, role, finish in (
+                ("done-u", "ses_done", base, "user", None),
+                ("done-a", "ses_done", base + 10, "assistant", "stop"),
+                ("stop-u", "ses_stop", base + 1000, "user", None),
+                ("stop-a", "ses_stop", base + 1010, "assistant", "tool-calls"),
+                ("resumed-u", "ses_resumed", base + 2000, "user", None),
+                ("resumed-a", "ses_resumed", base + 2010, "assistant", "stop"),
+                ("resumed-u2", "ses_resumed", base + 2020, "user", None),
+                ("open-u", "ses_open", base + 3000, "user", None),
+                ("open-a", "ses_open", base + 3010, "assistant", None),
+                ("live-u", "ses_live", now_ms - 1000, "user", None),
+                ("live-a", "ses_live", now_ms - 500, "assistant", "tool-calls"),
+                ("trunc-u", "ses_trunc", base + 4000, "user", None),
+                ("trunc-a", "ses_trunc", base + 4010, "assistant", "length"),
+            ):
+                data = {"role": role, "time": {"created": created}}
+                if finish is not None:
+                    data["finish"] = finish
+                conn.execute(
+                    "INSERT INTO message VALUES (?,?,?,?,?)",
+                    (mid, sid, created, created, json.dumps(data)),
+                )
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
+                sources = {row["id"]: row for row in meter.opencode_session_sources()}
+                meter._summary_cache.clear()
+                states = {
+                    sid: self._child_agent_row(row)["activity_state"]
+                    for sid, row in sources.items()
+                    if row.get("agent_parent_id")
+                }
+
+        # `stop` is the only confirmed finish, and only when nothing resumes it.
+        self.assertEqual(states["ses_done"], "complete")
+        self.assertEqual(states["ses_resumed"], "incomplete")
+        # Mid-loop, missing, and length-truncated turns stay nonterminal.
+        self.assertEqual(states["ses_stop"], "incomplete")
+        self.assertEqual(states["ses_open"], "incomplete")
+        # A nonterminal run that is still active reads as working, not complete.
+        self.assertEqual(states["ses_live"], "working")
+        # A length-truncated turn is not a confirmed finish either.
+        self.assertEqual(states["ses_trunc"], "incomplete")
+
     def test_child_sessions_reach_aggregate_totals_without_a_second_session(self):
         """canonical_agent_sources selects each child once and keeps accounting."""
         sources = [
@@ -18831,8 +19081,11 @@ class OpenCodeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             conn = self._build_db(root)
-            jan = int(datetime.datetime(2026, 1, 31, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
-            feb = int(datetime.datetime(2026, 2, 1, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            # Naive local noon, because the adapter groups cost by local day
+            # (time.localtime). A UTC-built instant lands on the next day east
+            # of UTC, which would move the cost out of the asserted bucket.
+            jan = int(datetime.datetime(2026, 1, 31, 12).timestamp() * 1000)
+            feb = int(datetime.datetime(2026, 2, 1, 12).timestamp() * 1000)
             top = self._session_row("ses_top", "/repo", "Across months", "model-b",
                                     0.1, 30, 7, 5, 3, 2, feb + 1000)
             conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -19526,6 +19779,193 @@ class ToolUsageEvidenceRealityTests(unittest.TestCase):
         self.assertEqual(mcps["ghost-mcp-proxy"]["calls"], 4)
         self.assertTrue(mcps["ghost-mcp-proxy"]["used"])
         self.assertEqual(mcps["ghost-mcp-proxy"]["configuration"], "Enabled")
+
+
+class DashboardThemeTests(unittest.TestCase):
+    """Theme choice is a browser preference applied before first paint and offered in Settings and ⌘K."""
+
+    def setUp(self):
+        self.page = Path(__file__).resolve().parents[1].joinpath("page.html").read_text(encoding="utf-8")
+
+    def run_boot(self, stored, throws=False):
+        boot = re.search(r"<script id=theme-boot>(.*?)</script>", self.page, re.S).group(1)
+        script = (
+            "const document={documentElement:{dataset:{theme:'classic'}}};const window={};"
+            f"const localStorage={{getItem(){{if({json.dumps(throws)})throw new Error('blocked');return {json.dumps(stored)};}}}};"
+            f"{boot};console.log(document.documentElement.dataset.theme);"
+        )
+        return subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout.strip()
+
+    def test_boot_script_applies_only_known_stored_themes(self):
+        self.assertIn("<html lang=en data-theme=classic>", self.page)
+        self.assertLess(self.page.index("<script id=theme-boot>"), self.page.index("<style>"))
+        self.assertEqual(self.run_boot("voltage"), "voltage")
+        self.assertEqual(self.run_boot("monolith"), "monolith")
+        self.assertEqual(self.run_boot("nebula"), "nebula")
+        self.assertEqual(self.run_boot("not-a-theme"), "classic")
+        self.assertEqual(self.run_boot(None), "classic")
+        self.assertEqual(self.run_boot("voltage", throws=True), "classic")
+
+    def daily_themes(self, dates):
+        boot = re.search(r"<script id=theme-boot>(.*?)</script>", self.page, re.S).group(1)
+        script = (
+            "const document={documentElement:{dataset:{}}};const window={};const localStorage={getItem(){return null;}};"
+            + boot.replace("window.tokenMeterTheme", "globalThis.tokenMeterTheme")
+            + f";console.log(JSON.stringify({json.dumps(dates)}.map(d=>tokenMeterTheme.resolve('random',new Date(d).getTime()))));"
+        )
+        return json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+
+    def test_random_theme_is_stable_within_a_day_and_changes_daily(self):
+        morning, evening = self.daily_themes(["2026-10-12T00:05:00", "2026-10-12T23:55:00"])
+        self.assertEqual(morning, evening)
+        start = datetime.date(2026, 9, 1)
+        days = [f"{start + datetime.timedelta(days=offset)}T12:00:00" for offset in range(56)]
+        picks = self.daily_themes(days)
+        ids = ["classic", "nebula", "monolith", "voltage", "phosphor"]
+        self.assertTrue(set(picks) <= set(ids))
+        self.assertEqual(sorted(set(picks)), sorted(ids), "every theme should appear over eight weeks")
+        self.assertTrue(all(a != b for a, b in zip(picks, picks[1:])), "a day never repeats yesterday's theme")
+        self.assertIn("setInterval(()=>{if(themePreference===THEME_RANDOM.id)", self.page)
+        self.assertIn("{id:'theme-random',label:`Theme · ${THEME_RANDOM.name}`", self.page)
+
+    def test_theme_registry_normalizes_and_feeds_the_palette(self):
+        start = self.page.index("const THEMES=[")
+        registry = self.page[start:self.page.index("let activeTheme=", start)]
+        script = registry + (
+            "console.log(JSON.stringify({ids:THEMES.map(t=>t.id),bad:normalizeThemeId('x'),ok:normalizeThemeId('voltage'),"
+            "label:themeLabel('monolith'),key:THEME_STORAGE_KEY,random:normalizeThemeId('random')}));"
+        )
+        result = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(result, {"ids": ["classic", "nebula", "monolith", "voltage", "phosphor"], "bad": "classic", "ok": "voltage",
+                                  "label": "Monolith", "key": "tm_theme", "random": "random"})
+        self.assertIn("...THEMES.map(theme=>({id:`theme-${theme.id}`,label:`Theme · ${theme.label}`", self.page)
+        self.assertIn("if(command.action==='theme'){setTheme(command.theme);return;}", self.page)
+        self.assertIn("route:'settings-appearance'", self.page)
+
+    def test_rapid_theme_changes_keep_page_and_storage_in_sync(self):
+        start = self.page.index("function setTheme(")
+        body = self.page[start:self.page.index("\n}\n", start) + 2]
+        script = (
+            "const THEMES=[{id:'nebula'},{id:'monolith'},{id:'voltage'}];"
+            "const normalizeThemeId=v=>THEMES.some(t=>t.id===v)?v:'nebula';const THEME_STORAGE_KEY='tm_theme';"
+            "const resolveTheme=v=>v;let themePreference='nebula';"
+            "let stored=null,repaints=0,queued=[];const localStorage={setItem(k,v){stored=v;}};"
+            "const pageSignalReducedMotionQuery={matches:false};"
+            "const document={documentElement:{dataset:{theme:'nebula'}},startViewTransition(cb){queued.push(cb);return {};}};"
+            "function paintThemePicker(){}function repaintThemedSurfaces(){repaints++;}"
+            "let activeTheme='nebula';" + body +
+            "setTheme('voltage');setTheme('monolith');setTheme('nebula');queued.forEach(cb=>cb());"
+            "console.log(JSON.stringify({page:document.documentElement.dataset.theme,stored,active:activeTheme,repaints}));"
+        )
+        result = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(result["page"], "nebula")
+        self.assertEqual(result["stored"], "nebula")
+        self.assertEqual(result["active"], "nebula")
+        self.assertGreaterEqual(result["repaints"], 1)
+
+    def test_performance_page_follows_the_dashboard_theme(self):
+        perf = Path(__file__).resolve().parents[1].joinpath("performance.html").read_text(encoding="utf-8")
+        boot = re.compile(r"<script id=theme-boot>.*?</script>", re.S)
+        self.assertEqual(boot.search(perf).group(0), boot.search(self.page).group(0))
+        self.assertIn("<html lang=en data-theme=classic>", perf)
+        block = re.compile(r"\n((?::root,)?\[data-theme=(\w+)\])\{([^{}]*)\}")
+        dashboard = {m.group(2): dict(re.findall(r"--([\w-]+):([^;]+);", m.group(3))) for m in block.finditer(self.page)}
+        performance = {m.group(2): dict(re.findall(r"--([\w-]+):([^;]+);", m.group(3))) for m in block.finditer(perf)}
+        self.assertEqual(sorted(performance), sorted(dashboard))
+        self.assertIn(":root,[data-theme=classic]{", perf)
+        for theme, tokens in performance.items():
+            with self.subTest(theme=theme):
+                self.assertTrue(tokens)
+                shared = {k: v for k, v in tokens.items() if not k.startswith("card-")}
+                self.assertEqual(shared, {k: dashboard[theme][k] for k in shared})
+                card = sorted(k for k in tokens if k.startswith("card-"))
+                self.assertEqual(card, ["card-a-rgb", "card-b-rgb", "card-c-rgb", "card-foot", "card-glow-rgb",
+                                        "card-hero", "card-hi-rgb", "card-idle-rgb", "card-paper-a-rgb",
+                                        "card-paper-b-rgb"])
+        style = perf[perf.index("<style>"):perf.index("</style>")]
+        chrome = block.sub("", style)
+        self.assertNotIn("#00bceb", chrome)
+        self.assertNotIn("rgba(0,188,235", chrome)
+        script = perf[perf.index("<script>"):perf.rindex("</script>")]
+        draw = script[script.index("function cardPalette("):script.index("function setStatus(")]
+        draw = draw.replace(draw[draw.index("const CLASSIC_CARD="):draw.index("\n", draw.index("const CLASSIC_CARD="))], "")
+        for literal in ("#00bceb", "#4054d6", "#8ee9f2", "#8f6ce6", "rgba(0,188,235", "rgba(64,84,214", "rgba(127,219,242", "#0d2c3d"):
+            with self.subTest(card_literal=literal):
+                self.assertNotIn(literal, draw)
+        self.assertIn("window.addEventListener('storage',event=>{", script)
+
+    def test_performance_rail_lists_the_same_destinations_as_the_dashboard(self):
+        perf = Path(__file__).resolve().parents[1].joinpath("performance.html").read_text(encoding="utf-8")
+        def groups(source, primary, secondary, label):
+            top = source[source.index(f"<div class={primary}>"):source.index(f"<div class={secondary}>")]
+            bottom = source[source.index(f"<div class={secondary}>"):source.index("</nav>", source.index(f"<div class={secondary}>"))]
+            return re.findall(label, top), re.findall(label, bottom)
+        dashboard = groups(self.page, "navPrimary", "navSecondary", r'class="?tab[^>]*data-label=(\w+)')
+        performance = groups(perf, "railPrimary", "railSecondary", r"<span class=railLabel>(\w+)</span>")
+        self.assertEqual(performance, dashboard)
+        self.assertEqual(dashboard[1][0], "Read")
+        tokenomics = re.search(r"const TOKENOMICS_SEARCH_URL='([^']+)'", self.page).group(1)
+        self.assertIn(f'id=tab-read href="{tokenomics}" target=_blank rel="noopener noreferrer"', perf)
+
+    def test_appearance_settings_section_and_route(self):
+        self.assertIn("<div class=settingsMapIntro><h2>Sections</h2></div>\n    <button type=button data-settings-target=appearance-settings><b>Appearance</b></button>", self.page)
+        content = self.page.index("<div class=settingsPageContent>")
+        self.assertEqual(self.page.index("<section", content), self.page.index('<section class="card pad appearanceSettings"', content))
+        self.assertIn('<section class="card pad appearanceSettings" id=appearance-settings>', self.page)
+        self.assertIn("<div class=themePicker id=theme-picker role=group aria-labelledby=appearance-title></div>", self.page)
+        self.assertIn("h==='settings-appearance'", self.page)
+        self.assertIn("option.setAttribute('aria-pressed',String(option.dataset.themeOption===themePreference));", self.page)
+        self.assertIn("window.addEventListener('storage',event=>{if(event.key===THEME_STORAGE_KEY)", self.page)
+
+    def test_theme_switch_repaints_token_driven_surfaces(self):
+        start = self.page.index("function repaintThemedSurfaces(){")
+        body = self.page[start:self.page.index("\n}", start)]
+        for marker in ("readChartTokens();", "drawIO(", "renderModelStats(", "renderEfficiency(",
+                       "drawSpendScatter(", "drawDeliveryChart(", "syncActivePageSignalEffects();", "meta[name=theme-color]"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, body)
+        effects = Path(__file__).resolve().parents[1].joinpath("assets", "session-effects.js").read_text(encoding="utf-8")
+        self.assertIn("getComputedStyle(element)", effects)
+        for token in ("--fx-front-rgb", "--fx-back-rgb", "--fx-edge-a-rgb", "--fx-edge-b-rgb"):
+            self.assertIn(f'"{token}"', effects)
+
+    def motion_source(self, start, end):
+        return self.page[self.page.index(start):self.page.index(end)]
+
+    def test_readouts_count_only_meaningful_numeric_changes(self):
+        source = self.motion_source("const READOUT_PATTERN=", "// Readouts count toward")
+        script = (
+            "let clock=0;const performance={now:()=>clock};const frames=[];const requestAnimationFrame=cb=>frames.push(cb);"
+            "const cssVar=()=>'480ms';" + source +
+            "const el={textContent:''};const ran=(a,b)=>{frames.length=0;tweenReadout(el,a,b);return frames.length>0;};"
+            "const out={placeholder:ran('—','$4.20'),word:ran('Sonnet 3.7','Sonnet 4.5'),suffix:ran('12K','3M'),"
+            "tiny:ran('$100.00','$100.40'),real:ran('$100.00','$140.00')};clock=2000;out.quiet=ran('$140.00','$200.00');"
+            "clock=20000;out.later=ran('$140.00','$200.00');"
+            "const other={textContent:''};frames.length=0;tweenReadout(other,'$1,000','$2,000');clock=50000;frames.shift()(clock);out.final=other.textContent;"
+            "console.log(JSON.stringify(out));"
+        )
+        result = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(result, {"placeholder": False, "word": False, "suffix": False, "tiny": False, "real": True,
+                                  "quiet": False, "later": True, "final": "$2,000"})
+
+    def test_no_glow_follows_the_cursor(self):
+        # A highlight moving behind text under the pointer made cards hard to read, so cards stay still.
+        self.assertNotIn("isSpotlit", self.page)
+        self.assertNotIn("--spot", self.page)
+        self.assertNotIn("spotlight", self.page.lower().replace("spotlights", ""))
+
+    def test_chart_reveal_runs_once_per_route_change(self):
+        source = self.motion_source("const chartsRevealedThisVisit=", "const READOUT_SELECTOR=")
+        script = (
+            "let animations=0;const svg={id:'iochart',childElementCount:3,getClientRects:()=>[1],animate(){animations++;}};"
+            "const $=()=>svg;const motionAllowed=()=>true;const cssVar=()=>'ease';const CHART_REVEAL_IDS=['iochart'];"
+            "class MutationObserver{observe(){}}" + source +
+            "const session={dataset:{entered:'1'},children:[]},spend={dataset:{entered:'1'},children:[]};"
+            "playRouteMotion(session);playRouteMotion(session);revealChart(svg);playRouteMotion(spend);playRouteMotion(session);"
+            "console.log(animations);"
+        )
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(result, "3")
 
 
 if __name__ == "__main__":
