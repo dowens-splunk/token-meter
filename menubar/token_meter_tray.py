@@ -76,6 +76,7 @@ def money(value):
 
 
 GOAL_METRIC_LABELS = {
+    "tokens": "Tokens",
     "spend": "Spend", "output_per_dollar": "Output/$", "cost_per_1k_lines": "$/1K lines",
     "context_load": "Context", "reasoning_ratio": "Reasoning", "frontier_share": "Frontier",
 }
@@ -90,6 +91,8 @@ def goal_value(metric, value):
         return "--"
     if metric == "spend":
         return money(value)
+    if metric == "tokens":
+        return compact_number(value)
     if metric == "output_per_dollar":
         return f"{value / 1000:.1f}K" if value >= 1000 else f"{value:.0f}"
     if metric == "cost_per_1k_lines":
@@ -104,8 +107,13 @@ def goal_menu_title(goal):
     metric = str(goal.get("metric") or "")
     kind = goal.get("scope_kind")
     agent = str(goal.get("agent") or "Agent")
+    try:
+        count = min(32, max(0, int(goal.get("model_count") or 0)))
+    except (ValueError, TypeError, OverflowError):
+        count = 0
     scope = ("OpenCode" if agent == "opencode" else agent.capitalize()) if kind == "agent" else (
-        str(goal.get("model") or "Model")[:60] if kind == "model" else "All")
+        str(goal.get("model") or "Model")[:60] if kind == "model" else
+        f"{count} models" if kind == "models" and count else "Models" if kind == "models" else "All")
     sign = "≤" if goal.get("comparison") != "at_least" else "≥"
     status = GOAL_STATUS_LABELS.get(goal.get("status"), "No result")
     return (f"{scope} {GOAL_METRIC_LABELS.get(metric, metric)}: {goal_value(metric, goal.get('value'))} / "

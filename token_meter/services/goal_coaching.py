@@ -117,9 +117,9 @@ def _coverage(goal, _drivers, _contributors):
     share = (goal.get("measurement") or {}).get("counted_share")
     if share is None or share >= COVERAGE_TRIGGER:
         return None
-    return _tip("coverage", "Most agent spend is outside your repositories",
-                f"Only {share:.0f}% of agent spend ran in repositories with pushes, so the rest cannot count.",
-                "Start agent sessions from inside the repository folder you will push from.")
+    return _tip("coverage", "Most agent spend lacks delivery coverage",
+                f"Only {share:.0f}% of agent spend has both repository attribution and measured Git coverage; the rest cannot count.",
+                "Review Repository evidence and start agent sessions from inside the repository folder you will push from.")
 
 
 def _repositories(goal, drivers, _contributors):

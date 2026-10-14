@@ -119,7 +119,7 @@ class GoalTargetAndStatusTests(unittest.TestCase):
         spend = {o["id"]: o["target"] for o in goals.target_options("spend", 200.0)}
         self.assertAlmostEqual(spend["cut_10"], 180.0)
         share = {o["id"]: o["target"] for o in goals.target_options("frontier_share", 8.0)}
-        self.assertEqual(share, {"lower_5": 3.0, "raise_5": 13.0})
+        self.assertEqual(share, {"lower_5": 3.0, "raise_5": 13.0, "hold": 8.0})
         self.assertEqual(goals.target_options("spend", None), [])
 
     def test_spend_baseline_is_normalized_to_month_length(self):
@@ -223,8 +223,101 @@ class GoalRefinementTests(unittest.TestCase):
              "availability": {"cost": True, "code_pushed": True, "partial": False}}]}
         result = goals.measure("cost_per_1k_lines", {"kind": "all", "key": ""}, "2026-10-01", "2026-10-31",
                                rows, available, git)
-        self.assertEqual(result["project_names"], ["big", "small"])
+        self.assertEqual(result["project_names"], ["big · bbbbbb", "small · aaaaaa"])
         self.assertEqual(result["counted_share"], 20.0)
+
+    def test_repository_preview_reports_omitted_and_unpaired_evidence(self):
+        project_rows = [{"project": f"repo-{index} · abcdef", "changed_lines": 100,
+                         "covered_cost": 1.0, "availability": {"cost": True, "code_pushed": True}}
+                        for index in range(9)]
+        project_rows.append({"project": "missing · abcdef", "covered_cost": 20.0,
+                             "availability": {"cost": True, "code_pushed": False}})
+        git = lambda scope, start, end: {"ok": True, "project_rows": project_rows, "stale": True}
+        detail = goals.drivers("cost_per_1k_lines", {"kind": "all", "key": ""},
+                              "2026-10-01", "2026-10-15", [], available, AGENTS, git)
+        self.assertEqual(len(detail["by_repository"]), 8)
+        self.assertEqual(detail["repository_coverage"]["omitted"], 1)
+        self.assertEqual(detail["repository_coverage"]["rows"][-1]["availability"],
+                         {"cost": True, "code_pushed": False, "partial": False})
+        self.assertTrue(detail["repository_coverage"]["stale"])
+        measured = goals.measure("cost_per_1k_lines", {"kind": "all", "key": ""},
+                                 "2026-10-01", "2026-10-15", [], available, git)
+        self.assertEqual(measured["value"], 10.0)
+        self.assertEqual(measured["projects"], 9)
+
+    def test_hold_uses_a_measured_zero_and_preserves_metric_direction(self):
+        self.assertEqual(goals.target_options("spend", 0),
+                         [{"id": "hold", "label": "Hold current level", "comparison": "at_most", "target": 0}])
+        for metric in ("output_per_dollar", "context_load", "reasoning_ratio", "frontier_share", "tokens"):
+            hold = next(option for option in goals.target_options(metric, 10) if option["id"] == "hold")
+            self.assertEqual(hold["target"], 10)
+            self.assertEqual(hold["comparison"], "at_least" if metric == "output_per_dollar" else "at_most")
+        rows = [session("codex", "1", [day("gpt-6-sol", "2026-09-02", 0, 100)])]
+        reference = goals.baseline("spend", {"kind": "all", "key": ""}, "month",
+                                   datetime.date(2026, 10, 1), datetime.date(2026, 10, 31),
+                                   rows, available, None, TODAY)
+        self.assertEqual((reference["source"], reference["value"]), ("previous", 0))
+
+    def test_model_lookup_includes_unpriced_models_outside_the_shortlist(self):
+        rows = [session("codex", str(index), [day(f"model-{index}", "2026-10-02", 1, 100)])
+                for index in range(16)]
+        rows.append(session("claude", "unpriced", [day("unpriced-model", "2026-10-02", 0, 100)],
+                            availability={"cost": False, "tokens": True}))
+        choices = goals.model_choices(rows, goals.model_inventory(rows), AGENTS, [], TODAY,
+                                      runtime="claude", query="unpriced")
+        self.assertEqual(len(choices["models"]), 1)
+        self.assertEqual(choices["models"][0]["runtime"], "claude")
+        self.assertEqual(choices["models"][0]["label"], "Claude · unpriced-model")
+
+    def test_tokens_include_cache_once_and_work_without_prices(self):
+        rows = [session("codex", "1", [day("gpt-6-sol", "2026-10-02", 2, 100,
+                                           input_tokens=900, cache_read_tokens=800,
+                                           reasoning_tokens=50, reasoning_output_tokens=100,
+                                           reasoning_executions=1)]),
+                session("claude", "2", [day("unpriced", "2026-10-02", 0, 200, input_tokens=800)],
+                        availability={"cost": False, "tokens": True})]
+        result = goals.measure("tokens", {"kind": "all", "key": ""},
+                               "2026-10-01", "2026-10-15", rows, available)
+        self.assertEqual(result["value"], 2000)
+        self.assertTrue(result["complete"])
+        breakdown = goals.drivers("tokens", {"kind": "all", "key": ""},
+                                   "2026-10-01", "2026-10-15", rows, available, AGENTS)
+        self.assertEqual(breakdown["token_drivers"]["total"], 2000)
+        self.assertEqual([row["share"] for row in breakdown["token_drivers"]["by_model"]], [50, 50])
+        contributors = goals.contributors("tokens", {"kind": "all", "key": ""},
+                                           "2026-10-01", "2026-10-15", rows, available, AGENTS)
+        self.assertEqual(contributors["basis"], "tokens")
+        self.assertEqual(contributors["sessions"], 2)
+
+    def test_tokens_keep_partial_counts_and_reject_unsafe_targets(self):
+        rows = [session("codex", "1", [day("gpt-6-sol", "2026-10-02", 0, 100,
+                                           input_tokens=0, io_covered_executions=0,
+                                           token_covered_executions=1, input_evidence=False,
+                                           output_evidence=True)], availability={"tokens": False})]
+        result = goals.measure("tokens", {"kind": "all", "key": ""},
+                               "2026-10-01", "2026-10-15", rows, available)
+        self.assertEqual(result["value"], 100)
+        self.assertFalse(result["complete"])
+        for target in (True, -1, 1.5, float("nan"), 2 ** 53):
+            with self.assertRaises(ValueError):
+                goals.normalize_goal(goal("tokens", target), AGENTS)
+        saved = goals.normalize_goal(goal("tokens", 3_000_000_001), AGENTS)
+        self.assertEqual(saved["target"], 3_000_000_001)
+        self.assertIsInstance(saved["target"], int)
+
+    def test_token_projection_and_custom_deadline_share_the_saved_window(self):
+        rows = [session("codex", "1", [day("gpt-6-sol", "2026-10-02", 0, 1000, input_tokens=0)])]
+        record = goal("tokens", 3000, period="custom", start="2026-10-01", end="2026-10-30")
+        item = goals.project({"items": [record]}, rows, AGENTS, available, None, set(), {}, TODAY)["goals"][0]
+        self.assertEqual(item["measurement"]["projected"], 2000)
+        self.assertEqual((item["start"], item["end"]), ("2026-10-01", "2026-10-30"))
+        self.assertEqual(item["status"], "on_track")
+        copy = goals.apply_action({"items": [record]}, {"operation": "save", "goal": {
+            **record, "start": "2026-10-15", "end": "2026-11-13", "target_option": "custom"}},
+            AGENTS, {}, TODAY)["items"]
+        self.assertNotEqual(copy[0]["id"], copy[1]["id"])
+        self.assertEqual(copy[0]["end"], "2026-10-30")
+        self.assertEqual(copy[1]["target"], 3000)
 
     def test_locally_priced_cost_is_not_labeled_estimated(self):
         priced = [session("codex", "1", [day("gpt-5.6-sol", "2026-10-02", 1.0, 10)], cost_approx=True)]
@@ -254,7 +347,7 @@ class GoalRefinementTests(unittest.TestCase):
         inventory = goals.model_inventory(rows)
         pinned_key = goals.model_key("codex", "model-1")
         pinned = goal("spend", 1, scope={"kind": "model", "key": pinned_key})
-        choices = goals._model_choices(rows, inventory, AGENTS, [pinned], TODAY)
+        choices = goals.model_choices(rows, inventory, AGENTS, [pinned], TODAY)["models"]
         self.assertEqual(choices[0]["label"], "Codex · model-20")
         self.assertEqual(choices[0]["recent_spend"], 20.0)
         self.assertEqual(len(choices), goals.MODEL_CHOICES + 1)
@@ -270,6 +363,84 @@ class GoalRefinementTests(unittest.TestCase):
                                        available)["value"], 900.0)
         with self.assertRaises(ValueError):
             goals.normalize_goal(goal("frontier_share", 50, scope={"kind": "model", "key": scope["key"]}), AGENTS)
+
+    def test_multiple_models_sum_selected_evidence_once_across_runtimes(self):
+        rows = [session("codex", "1", [day("shared-model", "2026-10-02", 1, 100, input_tokens=200),
+                                       day("other-model", "2026-10-02", 90, 90000)]),
+                session("claude", "2", [day("shared-model", "2026-10-02", 3, 900, input_tokens=600)]),
+                session("codex", "3", [day("excluded-model", "2026-10-02", 20, 1000)])]
+        keys = [goals.model_key("codex", "shared-model"), goals.model_key("claude", "shared-model")]
+        scope = {"kind": "models", "keys": keys}
+        record = goal("output_per_dollar", 80, comparison="at_least", scope=scope)
+        active = {goals.session_key(row) for row in rows}
+        detail = goals.goal_detail({"items": [record]}, record["id"], rows, AGENTS, available,
+                                   None, active, {}, TODAY)
+        self.assertEqual(detail["goal"]["measurement"]["value"], 250)
+        self.assertEqual(detail["goal"]["measurement"]["active"], 2)
+        self.assertEqual(detail["goal"]["scope"]["keys"], sorted(keys))
+        self.assertEqual(detail["contributors"]["sessions"], 2)
+        self.assertEqual(sum(row["cost"] for row in detail["contributors"]["items"]), 4)
+        self.assertEqual(len(detail["drivers"]["by_model"]), 2)
+        self.assertEqual(len(detail["drivers"]["by_agent"]), 2)
+        tokens = goals.project({"items": [goal("tokens", 5000, scope=scope)]}, rows, AGENTS,
+                               available, None, active, {}, TODAY)
+        self.assertEqual(tokens["goals"][0]["measurement"]["value"], 1800)
+        native = goals.native_summary(tokens, TODAY)["items"][0]
+        self.assertEqual((native["scope_kind"], native["model_count"]), ("models", 2))
+
+    def test_model_set_validation_and_missing_saved_selection(self):
+        rows = [session("codex", "1", [day("known-model", "2026-10-02", 2, 200)])]
+        known = goals.model_key("codex", "known-model")
+        missing = goals.model_key("claude", "missing-model")
+        record = goal("spend", 10, scope={"kind": "models", "keys": [missing, known, known]})
+        normalized = goals.normalize_goal(record, AGENTS)
+        self.assertEqual(normalized["scope"]["keys"], sorted([known, missing]))
+        data = goals.project({"items": [record]}, rows, AGENTS, available, None, set(), {}, TODAY)
+        self.assertEqual(data["goals"][0]["status"], "no_result")
+        self.assertIsNone(data["goals"][0]["measurement"]["value"])
+        detail = goals.goal_detail({"items": [record]}, record["id"], rows, AGENTS, available,
+                                   None, set(), {}, TODAY)
+        self.assertTrue(all(point["value"] is None for point in detail["trend"]))
+        self.assertEqual(detail["contributors"]["items"], [])
+        preview = goals.preview({"metric": "spend", "scope_kind": "models",
+                                 "scope_keys": json.dumps([known, missing]), "period": "month"},
+                                AGENTS, goals.model_inventory(rows), rows, available, None, TODAY)
+        self.assertIsNone(preview["baseline"]["value"])
+        with self.assertRaises(ValueError):
+            goals.apply_action({}, {"operation": "save", "goal": record}, AGENTS, {known}, TODAY)
+        saved = goals.apply_action({"items": [record]}, {"operation": "save", "id": record["id"],
+                                  "goal": {**record, "target": 20}}, AGENTS, {known}, TODAY)
+        self.assertEqual(saved["items"][0]["target"], 20)
+        for keys in ([], ["invalid"], [known] * 33):
+            with self.assertRaises(ValueError):
+                goals.normalize_goal(goal("spend", 10, scope={"kind": "models", "keys": keys}), AGENTS)
+        for metric in ("cost_per_1k_lines", "frontier_share"):
+            with self.assertRaises(ValueError):
+                goals.normalize_goal(goal(metric, 10, scope={"kind": "models", "keys": [known, missing]}), AGENTS)
+
+    def test_delivery_contributors_reconcile_all_repositories_not_sessions(self):
+        projects = [{"project": f"same-name · {index:06d}", "changed_lines": 100,
+                     "covered_cost": 2, "availability": {"cost": True, "code_pushed": True}}
+                    for index in range(9)]
+        projects.append({"project": "zero · abcdef", "changed_lines": 0, "covered_cost": 1,
+                         "availability": {"cost": True, "code_pushed": True}})
+        projects.append({"project": "spend-only · abcdef", "covered_cost": 100,
+                         "availability": {"cost": True, "code_pushed": False}})
+        git = lambda scope, start, end: {"ok": True, "project_rows": projects,
+                                        "coverage": {"selected_repositories": 11, "codes": ["scan_limited"]}}
+        record = goal("cost_per_1k_lines", 30)
+        rows = [session("codex", "outside", [day("model", "2026-10-02", 500, 100)])]
+        detail = goals.goal_detail({"items": [record]}, record["id"], rows, AGENTS, available,
+                                   git, set(), {}, TODAY)
+        contributors = detail["contributors"]
+        self.assertEqual(contributors["repositories"], 10)
+        self.assertEqual(len(contributors["items"]), 5)
+        self.assertEqual((contributors["total_cost"], contributors["total_lines"]), (19, 900))
+        self.assertAlmostEqual(detail["goal"]["measurement"]["value"], 19000 / 900)
+        self.assertEqual(contributors["items"][0]["label"], "same-name · 000000")
+        coverage = detail["drivers"]["repository_coverage"]
+        self.assertEqual((coverage["included"], coverage["discovered"], coverage["omitted"]), (10, 11, 2))
+        self.assertEqual(coverage["limits"], ["scan_limited"])
 
     def test_editing_a_repeating_goal_keeps_its_series_anchor(self):
         raw = {"items": [goal("spend", 20, start="2026-09-01", end="2026-09-30", repeat=True)]}
@@ -370,7 +541,7 @@ class GoalApplicationTests(unittest.TestCase):
             path = Path(tmp) / "settings.json"
             with mock.patch.object(meter, "cross_session", return_value={}), \
                     mock.patch.object(meter, "goal_evidence", side_effect=self.evidence):
-                result = meter.set_goals_action({"operation": "save", "goal": {"metric": "tokens"}}, str(path))
+                result = meter.set_goals_action({"operation": "save", "goal": {"metric": "unsupported"}}, str(path))
             self.assertFalse(result["ok"])
             self.assertFalse(path.exists())
 
@@ -379,6 +550,9 @@ class GoalApplicationTests(unittest.TestCase):
                 mock.patch.object(meter, "set_goals_action", return_value={"ok": True}) as action:
             payload, status = self.request("GET", "/goals?preview=1&metric=spend&scope_kind=all&period=month")
             self.request("GET", "/goals?goal=" + "a" * 32)
+            self.request("GET", "/goals?models=1&runtime=codex&query=gpt")
+            keys = json.dumps(["a" * 64, "b" * 64], separators=(",", ":"))
+            self.request("GET", "/goals?preview=1&metric=spend&scope_kind=models&period=month&scope_keys=" + keys)
             denied, denied_status = self.request("POST", "/goals", json.dumps({"operation": "end"}),
                                                  {"Content-Type": "application/json"})
             allowed, allowed_status = self.request("POST", "/goals", json.dumps({"operation": "end", "id": "x"}),
@@ -387,7 +561,10 @@ class GoalApplicationTests(unittest.TestCase):
         self.assertEqual((payload, status), ({"ok": True}, 200))
         self.assertEqual(state.call_args_list[0].args[0]["metric"], "spend")
         self.assertEqual(state.call_args_list[1].args[0]["goal"], "a" * 32)
+        self.assertEqual({key: state.call_args_list[2].args[0][key] for key in ("models", "runtime", "query")},
+                         {"models": "1", "runtime": "codex", "query": "gpt"})
         self.assertEqual(state.call_args_list[0].args[0]["period"], "month")
+        self.assertEqual(state.call_args_list[3].args[0]["scope_keys"], keys)
         self.assertEqual(denied_status, 403)
         self.assertEqual((allowed, allowed_status), ({"ok": True}, 200))
         action.assert_called_once_with({"operation": "end", "id": "x"})
@@ -400,6 +577,7 @@ class GoalApplicationTests(unittest.TestCase):
         for marker in ("id=efficiency-goals", "if(h==='goals')setHashRoute('efficiency-goals'",
                        "data-goal-new=spend", "data-goal-new=cost_per_1k_lines",
                        "data-goal-starter-add", "data-goal-undo", "id=goals-repeat", "id=goal-detail",
+                       "id=goals-model-picker", "id=goals-trend-chart", "Lines pushed", "aria-describedby=goals-trend-status",
                        "h.startsWith('efficiency-goals/')", "class=goalTitleLink", "aria-pressed=${goalDraft.option===id"):
             self.assertIn(marker, page)
         self.assertNotIn("id=tab-goals", page)
@@ -410,6 +588,22 @@ class GoalApplicationTests(unittest.TestCase):
 
 
 class GitWindowTests(unittest.TestCase):
+    def test_goal_git_query_uses_published_candidates_without_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = GitDeliveryService(os.path.join(directory, "ledger.sqlite3"))
+            rows = [session("codex", "1", [day("gpt-6-sol", "2026-10-02", 3.0, 100)],
+                            project=directory)]
+            label = Path(directory).name + " · " + service.project_suffix(directory)
+            candidate = {"project": label, "root": directory, "repo_key": "a" * 64}
+            with mock.patch.object(meter, "cached_git_delivery_candidates", return_value=(candidate,)), \
+                    mock.patch.object(meter, "git_delivery_service", return_value=service), \
+                    mock.patch.object(meter, "git_delivery_candidates", side_effect=AssertionError("fresh discovery")):
+                _models, query = meter._prepare_goal_evidence(rows, service)
+                result = query({"kind": "all", "key": ""}, "2026-10-01", "2026-10-15")
+            self.assertEqual(result["project_rows"][0]["project"], label)
+            self.assertEqual(result["project_rows"][0]["covered_cost"], 3.0)
+            self.assertTrue(result["stale"])
+
     def test_explicit_window_matches_fixed_range_and_rejects_bad_dates(self):
         with tempfile.TemporaryDirectory() as directory:
             now = datetime.datetime(2026, 10, 15, 12).timestamp()

@@ -545,6 +545,7 @@ struct MonthlyBudget {
 
 struct GoalSummary {
     static let metricLabels = [
+        "tokens": "Tokens",
         "spend": "Spend", "output_per_dollar": "Output/$", "cost_per_1k_lines": "$/1K lines",
         "context_load": "Context", "reasoning_ratio": "Reasoning", "frontier_share": "Frontier",
     ]
@@ -556,6 +557,7 @@ struct GoalSummary {
     var scopeKind: String
     var agent: String?
     var model: String?
+    var modelCount: Int
     var value: Double?
     var target: Double
     var atMost: Bool
@@ -563,11 +565,13 @@ struct GoalSummary {
 
     static func fromJSON(_ dict: [String: Any]) -> GoalSummary? {
         guard let metric = string(dict["metric"]), metricLabels[metric] != nil else { return nil }
+        let count = optionalDouble(dict["model_count"]) ?? 0
         return GoalSummary(
             metric: metric,
             scopeKind: string(dict["scope_kind"]) ?? "all",
             agent: string(dict["agent"]),
             model: string(dict["model"]),
+            modelCount: count.isFinite ? Int(max(0, min(32, count))) : 0,
             value: optionalDouble(dict["value"]),
             target: double(dict["target"]),
             atMost: string(dict["comparison"]) != "at_least",
@@ -578,6 +582,9 @@ struct GoalSummary {
     func formatted(_ number: Double?) -> String {
         guard let number = number, number.isFinite else { return "--" }
         switch metric {
+        case "tokens":
+            guard number >= 0, number < Double(Int.max) else { return "--" }
+            return formatCompactInt(Int(number))
         case "spend": return formatMoney(number)
         case "output_per_dollar":
             return number >= 1000 ? String(format: "%.1fK", number / 1000) : String(format: "%.0f", number)
@@ -590,7 +597,8 @@ struct GoalSummary {
     var title: String {
         let scope = scopeKind == "agent"
             ? (agent == "opencode" ? "OpenCode" : (agent ?? "Agent").capitalized)
-            : scopeKind == "model" ? (model ?? "Model") : "All"
+            : scopeKind == "model" ? (model ?? "Model")
+            : scopeKind == "models" ? (modelCount > 0 ? "\(modelCount) models" : "Models") : "All"
         let sign = atMost ? "≤" : "≥"
         return "\(scope) \(GoalSummary.metricLabels[metric] ?? metric): \(formatted(value)) / \(sign)\(formatted(target)) · \(GoalSummary.statusLabels[status] ?? status)"
     }

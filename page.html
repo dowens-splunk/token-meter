@@ -2204,7 +2204,7 @@ body.sessionRoute #view-session.sessionSubagents .currentDaySummary{display:none
 .goalsHead p{margin:0;color:var(--dim);font-size:var(--fs-12)}
 .goalsNotice{margin:0 0 12px;padding:10px 12px;border:1px solid var(--line2);border-radius:var(--radius-md);color:var(--dim);font-size:var(--fs-12)}
 .goalsNotice.tone-warn{border-color:var(--warn)}
-.goalsNotice[hidden],.goalsForm[hidden],.goalsCustom[hidden],.goalsDates[hidden],.goalsFormError[hidden],.goalsPrevious[hidden],.goalsRepeat[hidden],.goalsScopeNote[hidden]{display:none}
+.goalsNotice[hidden],.goalsForm[hidden],.goalsCustom[hidden],.goalsDates[hidden],.goalsFormError[hidden],.goalsPrevious[hidden],.goalsRepeat[hidden],.goalsScopeNote[hidden],.goalsStep[hidden],.goalsList[hidden],.goalStarters[hidden]{display:none}
 .goalStarters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .goalStarter{display:grid;gap:4px;min-width:220px;flex:1 1 220px;padding:12px 14px}
 .goalStarter strong{font-size:var(--fs-13)}
@@ -2276,6 +2276,7 @@ body.sessionRoute #view-session.sessionSubagents .currentDaySummary{display:none
 .goalDetailCard h5{margin:12px 0 6px;color:var(--dim);font-size:var(--fs-12);font-weight:var(--fw-bold)}
 .goalDetailGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .goalTrend{display:block;width:100%;height:160px}
+.goalTrendTip{white-space:normal;width:max-content;max-width:calc(100% - 16px)}
 .goalTrendAxis{display:flex;justify-content:space-between;gap:12px;margin-top:6px;color:var(--faint);font-size:var(--fs-11)}
 .goalDriverRow{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:10px;align-items:center;padding:4px 0;font-size:var(--fs-12)}
 .goalDriverRow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2787,24 +2788,27 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	  </div>
 	  <section class=goalsSection id=efficiency-goals aria-labelledby=goals-heading>
 	   <div id=goals-overview>
-	   <div class=goalsHead><div><h2 id=goals-heading tabindex=-1>Goals</h2><p>Choose what to measure, pick a target, and track progress here, on Spend and Git, and in the menu bar.</p></div><button class=tbtn id=goals-new type=button>New goal</button></div>
+	   <div class=goalsHead><div><h2 id=goals-heading tabindex=-1>Goals</h2><p>Choose what to measure, pick a target, and track progress here, on Spend and Git, and in the menu bar.</p></div><div class=goalActions><button class=tbtn id=goals-show-previous type=button>Previous goals</button><button class=tbtn id=goals-new type=button>New goal</button></div></div>
 	   <div class=goalsNotice id=goals-notice role=status aria-live=polite hidden></div>
 	   <div class=goalStarters id=goals-starters aria-label="Goal starters"></div>
 	   <form class="card goalsForm" id=goals-form novalidate hidden>
 	    <h3 id=goals-form-heading tabindex=-1>New goal</h3>
-	    <label class=goalsStep>1. Scope<select class=filterSelect id=goals-scope></select></label>
-	    <label class=goalsStep>2. Metric<select class=filterSelect id=goals-metric></select></label>
+	    <label class=goalsStep>1. App<select class=filterSelect id=goals-app></select></label>
+	    <div class=goalsStep><span>Models</span><details class=modelPicker id=goals-model-picker><summary aria-label="Choose models for this goal"><span id=goals-model-summary>All models</span></summary><div class=modelPickerMenu id=goals-model-options role=group aria-label="Models for this goal"></div></details></div>
+	    <label class="goalsStep goalsWide" id=goals-model-search-field hidden>Find an observed model<input id=goals-model-search type=search maxlength=120 autocomplete=off><small class=goalsHelp id=goals-model-note></small></label>
+	    <label class="goalsStep goalsWide">2. Metric<select class=filterSelect id=goals-metric></select></label>
 	    <p class="goalsHelp goalsWide" id=goals-metric-help></p>
 	    <p class="goalsHelp goalsWide goalsScopeNote" id=goals-scope-note aria-live=polite hidden></p>
-	    <div class="goalsStep goalsWide"><label for=goals-period>3. Period</label><select class=filterSelect id=goals-period><option value=week>This week</option><option value=month>This month</option><option value=custom>Custom dates</option></select><div class=goalsDates id=goals-dates hidden><label>Start<input id=goals-start type=date></label><label>End<input id=goals-end type=date></label></div><label class=goalsRepeat id=goals-repeat-field><input type=checkbox id=goals-repeat> Repeat every <span id=goals-repeat-unit>month</span> and keep a history</label></div>
+	    <div class="goalsStep goalsWide"><label for=goals-period>3. Period</label><select class=filterSelect id=goals-period><option value=today>Today</option><option value=week>This week</option><option value=month>This month</option><option value=next7>Next 7 days</option><option value=next30>Next 30 days</option><option value=next90>Next 90 days</option><option value=custom>Custom dates</option></select><div class=goalsDates id=goals-dates hidden><label>Start<input id=goals-start type=date></label><label>End<input id=goals-end type=date></label></div><label class=goalsRepeat id=goals-repeat-field><input type=checkbox id=goals-repeat> Repeat every <span id=goals-repeat-unit>month</span> and keep a history</label></div>
 	    <fieldset class="goalsStep goalsWide"><legend>4. Target</legend><p class=goalsHelp id=goals-baseline aria-live=polite></p><div class=goalsOptions id=goals-options role=group aria-label="Target"></div>
-	     <div class=goalsCustom id=goals-custom hidden><select class=filterSelect id=goals-comparison aria-label="Direction"><option value="">Choose direction</option><option value=at_most>At most</option><option value=at_least>At least</option></select><input id=goals-target type=number min=0 step=any aria-label="Target value"></div></fieldset>
+	     <div class=goalsCustom id=goals-custom hidden><select class=filterSelect id=goals-comparison aria-label="Direction"><option value="">Choose direction</option><option value=at_most>At most</option><option value=at_least>At least</option></select><input id=goals-target type=number min=0 step=any aria-label="Target value"></div><p class=goalsHelp id=goals-target-note hidden></p></fieldset>
 	    <label class="goalsStep goalsWide">Name (optional)<input id=goals-title maxlength=100></label>
 	    <div class=goalsFormError id=goals-form-error role=alert hidden></div>
 	    <div class=goalsFormActions><button class=tbtn type=submit id=goals-save>Save goal</button><button class=tbtn type=button id=goals-cancel>Cancel</button></div>
 	   </form>
+	   <div class="seg goalActions" id=goals-list-switch role=group aria-label="Goal history"><button type=button data-goals-list=current aria-pressed=true>Current goals</button><button type=button data-goals-list=previous aria-pressed=false>Previous goals</button></div>
 	   <div class=goalsList id=goals-list></div>
-	   <details class=goalsPrevious id=goals-previous hidden><summary>Previous goals</summary><div class=goalsList id=goals-previous-list></div></details>
+	   <div class=goalsPrevious id=goals-previous hidden><p class=goalsHelp>Results use current local evidence and pricing. Repeating goals keep their earlier periods in Details.</p><div class=goalsList id=goals-previous-list></div></div>
 	   </div>
 	   <div class=goalDetailView id=goal-detail aria-live=polite hidden></div>
 	  </section>
@@ -3801,10 +3805,11 @@ $('view-settings').onclick=event=>{
 
 showCurrentPanel(currentPanel);
 
-let GOALS=null,goalsLoading=null,goalsLoadedAt=0,goalDraft=null,goalPreviewRequest=0,goalDeletePending='',goalDeleteTimer=0;
+let GOALS=null,goalsLoading=null,goalsLoadedAt=0,goalDraft=null,goalPreviewRequest=0,goalDeletePending='',goalDeleteTimer=0,goalsListMode='current',goalModelRequest=0,goalModelTimer=0;
 const GOAL_STATUS_LABELS={on_track:'On track',at_risk:'At risk',met:'Met',missed:'Missed',no_result:'No result',ended:'Ended'};
 const GOAL_CONFIDENCE={complete:'Complete data',partial:'Partial data',estimated:'Estimated'};
 const GOAL_METRIC_HELP={
+ tokens:'Processed input plus output tokens, including cache and reasoning once. Usage volume is not a productivity or quality score. Set At most for a cap or At least for a milestone.',
  spend:'Estimated cost of agent work in the period. Lower it with cheaper models, less reasoning, and shorter sessions.',
  output_per_dollar:'Output tokens for each dollar spent. It rises with cheaper models and better cache use. More output is not always better work.',
  cost_per_1k_lines:'What 1,000 pushed lines cost in agent spend, in the repositories your sessions ran in. Lower means more code shipped per dollar. Delivery evidence, not a quality score. Needs at least 50 lines.',
@@ -3812,7 +3817,7 @@ const GOAL_METRIC_HELP={
  reasoning_ratio:'Share of output spent on reasoning. Lower it by choosing a lower reasoning effort when a task does not need it. Sessions from runtimes that do not report reasoning tokens are left out.',
  frontier_share:'Share of spend on frontier models. Lower it by using mid range or efficient models for routine work. Spend on unrecognized models is shown separately.',
 };
-const GOAL_PUSHED_SCOPE='Counts pushes from the Git repositories your agent sessions ran in, for every agent. Sessions started outside a repository folder are not counted.';
+const GOAL_PUSHED_SCOPE='All projects includes discovered repositories with both spend and measured Git coverage, across all apps and models. Lines pushed counts additions plus deletions. Sessions outside repository folders are not attributed.';
 function goalRepoText(count,names){
  if(!count)return 'no repositories';
  const shown=(names||[]).slice(0,3).join(', '),more=count-Math.min(count,3);
@@ -3827,6 +3832,7 @@ function goalValue(value,metric){
  if(value===null||value===undefined||!Number.isFinite(v))return '--';
  const unit=goalUnit(metric);
  if(unit==='usd')return money(v);
+ if(unit==='tokens')return `${compactNumber(v)} tokens`;
  if(unit==='tokens_per_usd')return `${compactNumber(v)} / $`;
  if(unit==='usd_per_1k_lines')return `${money(v)} / 1K lines`;
  if(unit==='percent')return `${v.toFixed(1)}%`;
@@ -3863,7 +3869,7 @@ function goalCard(g,compact=false){
  const m=g.measurement||{},value=m.value,target=Number(g.target),hasValue=value!==null&&value!==undefined;
  const fill=hasValue&&target>0?Math.min(100,Number(value)/target*100):0;
  const pace=m.projected!==undefined&&target>0?Math.min(100,m.projected/target*100):null;
- const detail=[g.status_reason||(m.projected!==undefined?`On pace for ${money(m.projected)}`:''),
+ const detail=[g.status_reason||(m.projected!==undefined?`On pace for ${goalValue(m.projected,g.metric)}`:''),
   g.progress?.early?'Early in the period':'',
   g.baseline?.value!==null&&g.baseline?.value!==undefined?`${g.baseline.label||'Last period'} ${goalValue(g.baseline.value,g.metric)}`:'',
   g.metric==='cost_per_1k_lines'&&m.observations?`${f(m.added)} added · ${f(m.deleted)} deleted`:'',
@@ -3883,7 +3889,7 @@ function goalCard(g,compact=false){
   +(guard?`<p class=goalDetail>Watch: ${esc(guard)}</p>`:'')
   +(compact?'':goalHistory(g))
   +(compact?`<div class=goalActions><a class=tbtn href="#efficiency-goals/${esc(g.id)}">Details</a></div>`
-   :`<div class=goalActions><a class=tbtn href="#efficiency-goals/${esc(g.id)}">Details</a><button class=tbtn type=button data-goal-edit="${esc(g.id)}">Edit</button>${goalIsCurrent(g)?`<button class=tbtn type=button data-goal-end="${esc(g.id)}">End</button>`:''}<button class=tbtn type=button data-goal-delete="${esc(g.id)}" aria-live=polite>${confirming?'Confirm delete':'Delete'}</button></div>`)
+   :`<div class=goalActions><a class=tbtn href="#efficiency-goals/${esc(g.id)}">Details</a><button class=tbtn type=button data-goal-edit="${esc(g.id)}">Edit</button><button class=tbtn type=button data-goal-duplicate="${esc(g.id)}">Duplicate</button>${goalIsCurrent(g)?`<button class=tbtn type=button data-goal-end="${esc(g.id)}">End</button>`:''}<button class=tbtn type=button data-goal-delete="${esc(g.id)}" aria-live=polite>${confirming?'Confirm delete':'Delete'}</button></div>`)
   +`</article>`;
 }
 function renderGoalStrip(listId,metric){
@@ -3896,8 +3902,11 @@ function renderGoals(){
  if(GOALS.dropped&&$('goals-notice').hidden)goalNotice(`${GOALS.dropped} goal${GOALS.dropped===1?'':'s'} from an earlier version can no longer be shown and will be removed the next time you save a goal.`);
  $('goals-starters').innerHTML=(GOALS.starters||[]).map((s,i)=>`<div class="card goalStarter"><strong>${esc(s.title)}</strong><small>${esc(s.enabled?`${s.comparison==='at_most'?'At most':'At least'} ${goalValue(s.target,s.metric)} this month · ${s.reason}`:s.reason)}</small><div class=goalActions><button class=tbtn type=button data-goal-starter-add=${i} ${s.enabled?'':'disabled'}>Add</button><button class=tbtn type=button data-goal-starter-edit=${i} ${s.enabled?'':'disabled'}>Customize</button></div></div>`).join('');
  $('goals-list').innerHTML=current.length?current.map(g=>goalCard(g)).join(''):'<p class="emptyState goalsEmpty">No current goals. Add a starter or choose New goal.</p>';
- $('goals-previous').hidden=!previous.length;
- $('goals-previous-list').innerHTML=previous.map(g=>goalCard(g)).join('');
+ $('goals-list').hidden=goalsListMode!=='current';
+ $('goals-starters').hidden=goalsListMode!=='current';
+ $('goals-previous').hidden=goalsListMode!=='previous';
+ $('goals-previous-list').innerHTML=previous.length?previous.map(g=>goalCard(g)).join(''):'<p class="emptyState goalsEmpty">No previous goals yet. Finished and ended goals appear here.</p>';
+ $('goals-list-switch').querySelectorAll('[data-goals-list]').forEach(button=>{const selected=button.dataset.goalsList===goalsListMode;button.setAttribute('aria-pressed',String(selected));button.classList.toggle('on',selected);});
  renderGoalStrip('spend-goals-list','spend');
  renderGoalStrip('git-goals-list','cost_per_1k_lines');
 }
@@ -3915,29 +3924,72 @@ async function loadGoals(force=false){
  })();
  return goalsLoading;
 }
-function goalScopeValue(scope){return `${scope?.kind||'all'}:${scope?.key||''}`;}
-function fillGoalScopes(metric,selected){
- const scopes=GOALS.metrics?.[metric]?.scopes||['all'];
- let html=`<option value="all:">${metric==='cost_per_1k_lines'?'All projects':'All agents'}</option>`;
- if(scopes.includes('agent'))html+=(GOALS.agents||[]).map(a=>`<option value="agent:${esc(a.id)}">${esc(a.label)}</option>`).join('');
- if(scopes.includes('model')&&(GOALS.models||[]).length)html+=`<optgroup label="${esc(`Your main models, by spend in the last ${GOALS.model_spend_days} days`)}">${GOALS.models.map(m=>`<option value="model:${esc(m.key)}">${esc(m.label)}${m.recent_spend?` · ${esc(money(m.recent_spend))}`:''}</option>`).join('')}</optgroup>`;
- $('goals-scope').innerHTML=html;
- $('goals-scope').value=[...$('goals-scope').options].some(o=>o.value===selected)?selected:'all:';
+function goalSelectedScope(){
+ const keys=[...(goalDraft?.modelKeys||[])].sort();
+ if(keys.length===1)return {kind:'model',key:keys[0]};
+ if(keys.length)return {kind:'models',key:'',keys};
+ return $('goals-app').value?{kind:'agent',key:$('goals-app').value}:{kind:'all',key:''};
 }
-function openGoalForm(preset={}){
+function renderGoalModelPicker(){
+ if(!goalDraft)return;
+ const keys=goalDraft.modelKeys||[],enabled=(GOALS.metrics?.[$('goals-metric').value]?.scopes||[]).includes('model'),picker=$('goals-model-picker'),summary=picker.querySelector('summary');
+ summary.setAttribute('aria-disabled',String(!enabled));summary.tabIndex=enabled?0:-1;
+ if(!enabled)picker.open=false;
+ $('goals-model-summary').textContent=keys.length===0?'All models':keys.length===1?(goalDraft.models.find(m=>m.key===keys[0])?.label||'Model unavailable'):`${keys.length} models selected`;
+ const choices=goalDraft.models||[],focused=document.activeElement?.closest('[data-goal-model]')?.dataset.goalModel;
+ $('goals-model-options').innerHTML=`<label class="modelOption all"><input type=checkbox data-goal-model=all ${keys.length?'':'checked'} ${enabled?'':'disabled'}><span>All models</span></label>`+choices.map(m=>`<label class=modelOption title="${esc(m.label)}"><input type=checkbox data-goal-model="${esc(m.key)}" ${keys.includes(m.key)?'checked':''} ${enabled?'':'disabled'}><span>${esc(m.label)}</span></label>`).join('');
+ if(focused)$('goals-model-options').querySelector(`[data-goal-model="${focused}"]`)?.focus();
+ $('goals-model-search-field').hidden=!enabled;
+ if(picker.open)requestAnimationFrame(positionGoalModelPicker);
+}
+function fillGoalScopes(metric,scope={kind:'all',key:''}){
+ const scopes=GOALS.metrics?.[metric]?.scopes||['all'],keys=scope.kind==='models'?scope.keys||[]:scope.kind==='model'?[scope.key]:[],known=[...(GOALS.models||[]),...(goalDraft.models||[])],model=known.find(m=>m.key===scope.key),app=scope.kind==='agent'?scope.key:scope.kind==='model'?model?.runtime||'':'';
+ $('goals-app').innerHTML='<option value="">All apps</option>'+(scopes.includes('agent')?(GOALS.agents||[]).map(a=>`<option value="${esc(a.id)}">${esc(a.label)}</option>`).join(''):'');
+ $('goals-app').value=app;$('goals-app').disabled=!scopes.includes('agent');
+ goalDraft.modelKeys=scopes.includes('model')?[...keys]:[];
+ goalDraft.models=(GOALS.models||[]).filter(m=>!app||m.runtime===app);
+ for(const key of goalDraft.modelKeys)if(!goalDraft.models.some(m=>m.key===key))goalDraft.models.push(known.find(m=>m.key===key)||{key,runtime:'',label:'Model unavailable — remove to choose another'});
+ $('goals-model-search').value='';renderGoalModelPicker();refreshGoalModels();
+}
+async function refreshGoalModels(){
+ const request=++goalModelRequest;
+ if(!goalDraft||!(GOALS.metrics?.[$('goals-metric').value]?.scopes||[]).includes('model'))return;
+ const params=new URLSearchParams({models:'1',runtime:$('goals-app').value,query:$('goals-model-search').value});
+ $('goals-model-note').textContent='Reading observed models…';
+ let data;try{data=await(await fetch(`/goals?${params}`,{cache:'no-store'})).json();}catch{data={ok:false};}
+ if(request!==goalModelRequest||!goalDraft)return;
+ if(!data.ok){$('goals-model-note').textContent='Model choices are unavailable. Existing selection is preserved.';return;}
+ const previous=goalDraft.models||[],choices=[...(data.models||[])];
+ for(const key of goalDraft.modelKeys||[])if(!choices.some(m=>m.key===key))choices.push(previous.find(m=>m.key===key)||{key,runtime:'',label:'Model unavailable — remove to choose another'});
+ goalDraft.models=choices;renderGoalModelPicker();
+ $('goals-model-note').textContent=`${data.models.length} of ${data.total} observed models shown, ranked by recent spend. Select up to ${GOALS.max_selected_models||32}. Search by name; unpriced models are included and selected models stay available across searches.`;
+}
+function positionGoalModelPicker(){
+ const picker=$('goals-model-picker'),menu=$('goals-model-options');if(!picker.open){picker.classList.remove('opensUp');menu.style.maxHeight='';return;}
+ const rect=picker.querySelector('summary').getBoundingClientRect(),margin=12,above=Math.max(0,rect.top-margin),below=Math.max(0,window.innerHeight-rect.bottom-margin),preferred=Math.min(360,menu.scrollHeight||360),opensUp=below<preferred&&above>below;
+ picker.classList.toggle('opensUp',opensUp);menu.style.maxHeight=`${Math.min(360,opensUp?above:below)}px`;
+}
+function goalPeriodFields(){
+ const choice=$('goals-period').value;
+ if(choice==='week'||choice==='month')return {period:choice,start:goalDraft?.anchor||'',end:''};
+ if(choice==='custom')return {period:'custom',start:$('goals-start').value,end:$('goals-end').value};
+ const count={today:1,next7:7,next30:30,next90:90}[choice]||1;
+ return {period:'custom',start:GOALS.today,end:spendShiftDay(GOALS.today,count-1)};
+}
+function openGoalForm(preset={},duplicate=false){
  if(!GOALS)return;
  const metric=preset.metric||'spend';
- goalDraft={id:preset.id||'',option:'',wantedOption:preset.target_option||'',autoTitle:preset.id?'':(preset.title||''),saved:preset.id?{comparison:preset.comparison,target:preset.target}:null,anchor:preset.id&&preset.period!=='custom'?preset.start:''};
+ goalDraft={id:duplicate?'':preset.id||'',option:'',wantedOption:duplicate?'custom':preset.target_option||'',autoTitle:preset.id?'':(preset.title||''),saved:preset.id?{comparison:preset.comparison,target:preset.target}:null,anchor:!duplicate&&preset.id&&preset.period!=='custom'?preset.start:'',returnMode:goalsListMode};
  $('goals-metric').innerHTML=Object.entries(GOALS.metrics).map(([id,m])=>`<option value="${esc(id)}">${esc(m.label)}</option>`).join('');
  $('goals-metric').value=metric;
- fillGoalScopes(metric,goalScopeValue(preset.scope));
+ fillGoalScopes(metric,preset.scope);
  $('goals-period').value=preset.period||'month';
  $('goals-repeat').checked=!!preset.repeat;
- const today=GOALS.today,later=new Date(Date.parse(today+'T12:00:00')+29*864e5).toISOString().slice(0,10);
- $('goals-start').value=preset.start||today;$('goals-end').value=preset.end||later;
+ const today=GOALS.today,length=duplicate&&preset.period==='custom'?Math.round((Date.parse(preset.end+'T12:00:00Z')-Date.parse(preset.start+'T12:00:00Z'))/864e5):29;
+ $('goals-start').value=duplicate?today:preset.start||today;$('goals-end').value=duplicate?spendShiftDay(today,length):preset.end||spendShiftDay(today,29);
  $('goals-title').value=preset.title||'';
  $('goals-comparison').value='';$('goals-target').value='';
- $('goals-form-heading').textContent=preset.id?'Edit goal':'New goal';
+ $('goals-form-heading').textContent=duplicate?'Duplicate goal':preset.id?'Edit goal':'New goal';
  goalFormError('');
  $('goals-form').hidden=false;
  updateGoalFormFields();
@@ -3947,21 +3999,24 @@ function openGoalForm(preset={}){
 }
 function clearAutoTitle(){if(goalDraft?.autoTitle&&$('goals-title').value===goalDraft.autoTitle){$('goals-title').value='';goalDraft.autoTitle='';}}
 function updateGoalFormFields(){
- const metric=$('goals-metric').value,period=$('goals-period').value,[kind,key]=$('goals-scope').value.split(':');
+ const metric=$('goals-metric').value,{period}=goalPeriodFields(),{kind,key}=goalSelectedScope();
  $('goals-metric-help').textContent=GOAL_METRIC_HELP[metric]||'';
- $('goals-dates').hidden=period!=='custom';
+ $('goals-dates').hidden=$('goals-period').value!=='custom';
  $('goals-repeat-field').hidden=period==='custom';
  $('goals-repeat-unit').textContent=period;
- $('goals-target').max=goalUnit(metric)==='percent'?'100':'';
+ $('goals-target').max=goalUnit(metric)==='percent'?'100':goalUnit(metric)==='tokens'?String(Number.MAX_SAFE_INTEGER):'';
+ $('goals-target').step=goalUnit(metric)==='tokens'?'1':'any';
  const allocations=GOALS?.budget_allocations||{},allocation=kind==='all'?Object.values(allocations).reduce((a,b)=>a+b,0):kind==='agent'?Number(allocations[key]||0):0;
- const label=kind==='all'?'all agents':(GOALS.agents||[]).find(a=>a.id===key)?.label||'';
- $('goals-scope-note').hidden=metric!=='spend'&&metric!=='cost_per_1k_lines';
- $('goals-scope-note').textContent=metric==='cost_per_1k_lines'?GOAL_PUSHED_SCOPE:metric!=='spend'?'':GOAL_SPEND_CONTROLS+(period==='month'&&allocation>0?` You already have a ${money(allocation)} monthly budget for ${label}. It keeps its alerts; this goal shows it as a reference.`:'');
+ const label=kind==='all'?'all apps':(GOALS.agents||[]).find(a=>a.id===key)?.label||'';
+ $('goals-scope-note').hidden=!['spend','cost_per_1k_lines','frontier_share'].includes(metric);
+ $('goals-scope-note').textContent=metric==='cost_per_1k_lines'?GOAL_PUSHED_SCOPE:metric==='frontier_share'?'Frontier share compares models, so choose All models for all apps or one app.':metric!=='spend'?'':GOAL_SPEND_CONTROLS+(period==='month'&&allocation>0?` You already have a ${money(allocation)} monthly budget for ${label}. It keeps its alerts; this goal shows it as a reference.`:'');
 }
 async function refreshGoalPreview(){
- const request=++goalPreviewRequest,metric=$('goals-metric').value,[kind,key]=$('goals-scope').value.split(':'),period=$('goals-period').value;
+ const request=++goalPreviewRequest,metric=$('goals-metric').value,{kind,key,keys}=goalSelectedScope(),{period,start,end}=goalPeriodFields();
  const params=new URLSearchParams({preview:'1',metric,scope_kind:kind,scope_key:key||'',period});
- if(period==='custom'){params.set('start',$('goals-start').value);params.set('end',$('goals-end').value);}
+ if(kind==='models')params.set('scope_keys',JSON.stringify(keys));
+ goalDraft.start='';goalDraft.end='';$('goals-save').disabled=true;
+ if(period==='custom'){params.set('start',start);params.set('end',end);}
  else if(goalDraft.anchor)params.set('start',goalDraft.anchor);
  $('goals-baseline').textContent='Checking the previous period…';
  let data;
@@ -3969,16 +4024,17 @@ async function refreshGoalPreview(){
  if(request!==goalPreviewRequest||!goalDraft)return;
  goalDraft.options=data.ok?data.options:[];
  goalDraft.start=data.start||'';goalDraft.end=data.end||'';
- const b=data.baseline;
+ $('goals-save').disabled=false;
+ const b=data.baseline||{};
  goalDraft.current=data.ok?b.value:null;
- const scaled=metric==='spend'?(b.source==='so_far'?', projected for the full period':`, scaled to a full ${period==='custom'?'period':period}`):'';
+ const scaled=GOALS.metrics?.[metric]?.cumulative?(b.source==='so_far'?', projected for the full period':`, scaled to a full ${period==='custom'?'period':period}`):'';
  $('goals-baseline').textContent=!data.ok?data.error:b.value!==null
   ?`Goal period ${data.start} to ${data.end}. Current: ${goalValue(b.value,metric)} (${b.label.toLowerCase()}, ${b.start} to ${b.end}${scaled})${b.estimated?' · estimated':''}${b.complete?'':' · partial data'}.`
   :`Goal period ${data.start} to ${data.end}. No current value yet (${b.reason}), so choose Custom to set a target.`;
  if(goalDraft.wantedOption){
   const wanted=goalDraft.options.find(o=>o.id===goalDraft.wantedOption),saved=goalDraft.saved;
   // Editing keeps the saved number; an option is reselected only if it still produces that number.
-  if(wanted&&(!saved||Math.abs(wanted.target-saved.target)<=Math.max(0.005,Math.abs(saved.target)*0.005)))goalDraft.option=wanted.id;
+  if(wanted&&(!saved||wanted.target===saved.target&&wanted.comparison===saved.comparison))goalDraft.option=wanted.id;
   else if(saved){goalDraft.option='custom';$('goals-comparison').value=saved.comparison;$('goals-target').value=saved.target;}
   goalDraft.wantedOption='';
  }
@@ -3986,20 +4042,21 @@ async function refreshGoalPreview(){
  if(metric==='cost_per_1k_lines'&&data.ok){
   const share=b.counted_share,coverage=goalCoverageText(share);
   $('goals-scope-note').textContent=`${GOAL_PUSHED_SCOPE} ${b.label||'Previous period'}: ${goalRepoText(b.project_count||0,b.projects)}${coverage?`, covering ${coverage}`:''}.`
-   +(!b.project_count?' Start agent sessions inside a repository folder so their pushes count.':share!==null&&share<50?' Most of your spend ran outside these repositories; starting sessions inside the repository folder counts more of your work.':'');
+   +(!b.project_count||share!==null&&share<50?' Review Repository evidence on the saved goal for missing spend or Git coverage.':'');
  }
  renderGoalOptions();
 }
 function renderGoalOptions(focus=false){
  const metric=$('goals-metric').value;
  const chip=(id,label,detail)=>`<button class=goalOption type=button aria-pressed=${goalDraft.option===id?'true':'false'} data-goal-option="${esc(id)}">${esc(label)}<small>${esc(detail)}</small></button>`;
- $('goals-options').innerHTML=goalDraft.options.map(o=>chip(o.id,o.label,goalDraft.current!==null&&goalDraft.current!==undefined?`${goalValue(goalDraft.current,metric)} → ${goalValue(o.target,metric)}`:`${o.comparison==='at_most'?'At most':'At least'} ${goalValue(o.target,metric)}`)).join('')+chip('custom','Custom','Set your own target');
+ $('goals-options').innerHTML=goalDraft.options.map(o=>chip(o.id,o.label,`${o.comparison==='at_most'?'At most':'At least'} ${goalValue(o.target,metric)}${goalDraft.current!==null&&goalDraft.current!==undefined?` · from ${goalValue(goalDraft.current,metric)}`:''}`)).join('')+chip('custom','Custom','Set your own target');
  $('goals-custom').hidden=goalDraft.option!=='custom';
  // Metrics with only one sensible direction fix Custom's direction too.
  const direction=GOALS.metrics?.[metric]?.direction||'';
  if(!direction&&$('goals-comparison').disabled)$('goals-comparison').value='';
  $('goals-comparison').disabled=!!direction;
  if(direction)$('goals-comparison').value=direction;
+ updateGoalTargetNote();
  $('goals-comparison').title=direction?`${direction==='at_most'?'Lower':'Higher'} is better for ${goalLabel(metric)}`:'';
  if(focus)$('goals-options').querySelector(`[data-goal-option="${goalDraft.option}"]`)?.focus();
 }
@@ -4007,6 +4064,11 @@ function chooseGoalOption(id,focus=false){
  if(!goalDraft)return;
  if(id!==goalDraft.option)clearAutoTitle();
  goalDraft.option=id;goalFormError('');renderGoalOptions(focus);
+}
+function updateGoalTargetNote(){
+ const note=$('goals-target-note'),raw=$('goals-target').value,value=Number(raw);
+ note.hidden=goalUnit($('goals-metric').value)!=='tokens'||goalDraft?.option!=='custom';
+ note.textContent=raw!==''&&Number.isSafeInteger(value)&&value>=0?`${compactNumber(value)} tokens · ${f(value)} exactly`:'Enter a whole-token count, for example 1000000000 for 1B tokens.';
 }
 function goalFormError(text){$('goals-form-error').textContent=text;$('goals-form-error').hidden=!text;}
 async function postGoalAction(payload){
@@ -4019,13 +4081,14 @@ async function postGoalAction(payload){
 }
 function acceptGoalResult(result){GOALS=result;goalsLoadedAt=Date.now();renderGoals();}
 async function saveGoalForm(){
- const metric=$('goals-metric').value,[kind,key]=$('goals-scope').value.split(':'),option=goalDraft.option,period=$('goals-period').value;
+ const metric=$('goals-metric').value,scope=goalSelectedScope(),option=goalDraft.option,{period}=goalPeriodFields();
  let comparison,target;
  if(!option)return goalFormError('Choose a target.');
  if(option==='custom'){
   comparison=$('goals-comparison').value;target=Number($('goals-target').value);
   if(!comparison)return goalFormError('Choose At most or At least.');
   if($('goals-target').value===''||!Number.isFinite(target)||target<0||(goalUnit(metric)==='percent'&&target>100))return goalFormError('Enter a valid target.');
+  if(goalUnit(metric)==='tokens'&&!Number.isSafeInteger(target))return goalFormError('Enter a whole-token count within the supported range.');
  }else{
   const chosen=goalDraft.options.find(o=>o.id===option);
   if(!chosen)return goalFormError('Choose a target.');
@@ -4033,10 +4096,11 @@ async function saveGoalForm(){
  }
  if(!goalDraft.start)return goalFormError('Choose a valid period.');
  $('goals-save').disabled=true;
- const result=await postGoalAction({operation:'save',id:goalDraft.id||undefined,goal:{metric,scope:{kind,key:key||''},comparison,target,target_option:option,period,start:goalDraft.start,end:goalDraft.end,repeat:period!=='custom'&&$('goals-repeat').checked,title:$('goals-title').value.trim()||null}});
+ const edited=!!goalDraft.id,returnMode=goalDraft.returnMode;
+ const result=await postGoalAction({operation:'save',id:goalDraft.id||undefined,goal:{metric,scope,comparison,target,target_option:option,period,start:goalDraft.start,end:goalDraft.end,repeat:period!=='custom'&&$('goals-repeat').checked,title:$('goals-title').value.trim()||null}});
  $('goals-save').disabled=false;
  if(!result.ok)return goalFormError(result.error||'Token Meter could not save this goal.');
- goalDraft=null;$('goals-form').hidden=true;goalNotice('Goal saved.');acceptGoalResult(result);
+ goalsListMode=edited?returnMode:'current';goalDraft=null;$('goals-form').hidden=true;goalNotice('Goal saved.');acceptGoalResult(result);$('goals-new').focus();
 }
 async function addStarterGoal(s){
  const before=new Set((GOALS?.goals||[]).map(g=>g.id));
@@ -4059,19 +4123,47 @@ function requestGoalDelete(id){
  }
  goalDeletePending='';clearTimeout(goalDeleteTimer);goalAction('delete',id,'Goal deleted.');
 }
+function setGoalsList(mode){goalsListMode=mode;renderGoals();$('goals-list-switch').querySelector(`[data-goals-list="${mode}"]`)?.focus();}
+$('goals-show-previous').onclick=async()=>{await loadGoals();if(GOALS)setGoalsList('previous');};
+$('goals-list-switch').addEventListener('click',event=>{const button=event.target.closest('[data-goals-list]');if(button)setGoalsList(button.dataset.goalsList);});
 $('goals-new').onclick=async()=>{await loadGoals();if(GOALS)openGoalForm();};
-$('goals-cancel').onclick=()=>{$('goals-form').hidden=true;goalDraft=null;};
+$('goals-cancel').onclick=()=>{$('goals-form').hidden=true;goalsListMode=goalDraft?.returnMode||goalsListMode;goalDraft=null;++goalModelRequest;++goalPreviewRequest;renderGoals();$('goals-new').focus();};
 $('goals-form').addEventListener('submit',event=>{event.preventDefault();saveGoalForm();});
-$('goals-metric').addEventListener('change',()=>{fillGoalScopes($('goals-metric').value,$('goals-scope').value);clearAutoTitle();goalDraft.option='';updateGoalFormFields();refreshGoalPreview();});
-['goals-scope','goals-period','goals-start','goals-end'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='goals-scope')clearAutoTitle();updateGoalFormFields();refreshGoalPreview();}));
+$('goals-metric').addEventListener('change',()=>{const app=$('goals-app').value;fillGoalScopes($('goals-metric').value,goalSelectedScope());if(!$('goals-app').disabled)$('goals-app').value=app;refreshGoalModels();clearAutoTitle();goalDraft.option='';updateGoalFormFields();refreshGoalPreview();});
+$('goals-app').addEventListener('change',()=>{
+ const app=$('goals-app').value,before=goalDraft.modelKeys.length;
+ if(app)goalDraft.modelKeys=goalDraft.modelKeys.filter(key=>goalDraft.models.find(m=>m.key===key)?.runtime===app);
+ goalFormError(before!==goalDraft.modelKeys.length?'Selections from other apps were removed. Review the model selection before saving.':'');
+ goalDraft.models=goalDraft.models.filter(m=>!app||m.runtime===app||goalDraft.modelKeys.includes(m.key));
+ renderGoalModelPicker();clearAutoTitle();goalDraft.option='';updateGoalFormFields();refreshGoalPreview();refreshGoalModels();
+});
+$('goals-model-picker').querySelector('summary').addEventListener('click',event=>{if(event.currentTarget.getAttribute('aria-disabled')==='true')event.preventDefault();});
+$('goals-model-picker').addEventListener('keydown',event=>{if(event.key==='Escape'){$('goals-model-picker').open=false;$('goals-model-picker').querySelector('summary').focus();}});
+$('goals-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionGoalModelPicker));
+window.addEventListener('resize',()=>{if($('goals-model-picker').open)positionGoalModelPicker();});
+document.addEventListener('pointerdown',event=>{const picker=$('goals-model-picker');if(picker.open&&!picker.contains(event.target))picker.open=false;});
+$('goals-model-options').addEventListener('change',event=>{
+ const input=event.target.closest('[data-goal-model]');if(!input||!goalDraft)return;
+ const key=input.dataset.goalModel,keys=new Set(goalDraft.modelKeys);
+ if(key==='all')keys.clear();else if(input.checked){if(keys.size>=(GOALS.max_selected_models||32)){input.checked=false;goalFormError(`Select at most ${GOALS.max_selected_models||32} models.`);return;}keys.add(key);}else keys.delete(key);
+ goalDraft.modelKeys=[...keys].sort();
+ const all=$('goals-model-options').querySelector('[data-goal-model="all"]');all.checked=keys.size===0;
+ $('goals-model-options').querySelectorAll('[data-goal-model]').forEach(option=>{if(option!==all)option.checked=keys.has(option.dataset.goalModel);});
+ $('goals-model-summary').textContent=keys.size===0?'All models':keys.size===1?(goalDraft.models.find(m=>keys.has(m.key))?.label||'Model unavailable'):`${keys.size} models selected`;
+ goalFormError('');clearAutoTitle();goalDraft.option='';updateGoalFormFields();refreshGoalPreview();
+});
+$('goals-model-search').addEventListener('input',()=>{clearTimeout(goalModelTimer);++goalModelRequest;goalModelTimer=setTimeout(refreshGoalModels,200);});
+$('goals-target').addEventListener('input',updateGoalTargetNote);
+['goals-period','goals-start','goals-end'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='goals-period')goalDraft.anchor='';updateGoalFormFields();refreshGoalPreview();}));
 $('goals-options').addEventListener('click',event=>{const button=event.target.closest('[data-goal-option]');if(!button)return;chooseGoalOption(button.dataset.goalOption,true);if(button.dataset.goalOption==='custom')($('goals-comparison').disabled?$('goals-target'):$('goals-comparison')).focus();});
 $('goals-notice').addEventListener('click',event=>{const undo=event.target.closest('[data-goal-undo]');if(undo)goalAction('delete',undo.dataset.goalUndo,'Goal removed.');});
 $('efficiency-goals').addEventListener('click',event=>{
- const add=event.target.closest('[data-goal-starter-add]'),customize=event.target.closest('[data-goal-starter-edit]'),edit=event.target.closest('[data-goal-edit]'),end=event.target.closest('[data-goal-end]'),remove=event.target.closest('[data-goal-delete]');
+ const add=event.target.closest('[data-goal-starter-add]'),customize=event.target.closest('[data-goal-starter-edit]'),edit=event.target.closest('[data-goal-edit]'),duplicate=event.target.closest('[data-goal-duplicate]'),end=event.target.closest('[data-goal-end]'),remove=event.target.closest('[data-goal-delete]');
  const starter=GOALS?.starters?.[Number((add||customize)?.dataset.goalStarterAdd??(add||customize)?.dataset.goalStarterEdit)];
  if(add&&starter?.enabled)addStarterGoal(starter);
  else if(customize&&starter?.enabled)openGoalForm({metric:starter.metric,scope:starter.scope,period:starter.period,target_option:starter.target_option,title:starter.title});
  else if(edit){const g=GOALS?.goals?.find(goal=>goal.id===edit.dataset.goalEdit);if(g){if(!$('goal-detail').hidden)setHashRoute('efficiency-goals');openGoalForm(g);}}
+ else if(duplicate){const g=GOALS?.goals?.find(goal=>goal.id===duplicate.dataset.goalDuplicate);if(g){if(!$('goal-detail').hidden)setHashRoute('efficiency-goals');openGoalForm(g,true);}}
  else if(end)goalAction('end',end.dataset.goalEnd,'Goal ended.');
  else if(remove)requestGoalDelete(remove.dataset.goalDelete);
 });
@@ -4081,13 +4173,19 @@ function openGoalFromLink(event){
  loadGoals().then(()=>{if(GOALS)openGoalForm({metric:link.dataset.goalNew});});
 }
 document.addEventListener('click',openGoalFromLink);
-let goalDetailRequest=0;
+let goalDetailRequest=0,goalDetailOrigin='',goalDetailData=null;
+function releaseGoalChart(){const svg=$('goals-trend-chart');if(svg)chartResizeObserver.unobserve(svg);goalDetailData=null;}
 function showGoalDetail(open){
+ const wasOpen=!$('goal-detail').hidden;
+ if(!open){++goalDetailRequest;releaseGoalChart();}
  $('view-efficiency').classList.toggle('goalDetailOpen',open);
  $('goals-overview').hidden=open;$('goal-detail').hidden=!open;
+ if(!open&&wasOpen)requestAnimationFrame(()=>{const link=[...$('goals-overview').querySelectorAll('.goalTitleLink')].find(a=>a.getAttribute('href')===`#efficiency-goals/${goalDetailOrigin}`);(link||$('goals-heading')).focus();});
 }
 function goalBackLink(){return '<a class=tbtn href="#efficiency-goals">← Back to goals</a>';}
 async function loadGoalDetail(id){
+ goalDetailOrigin=id;
+ releaseGoalChart();
  showGoalDetail(true);
  const request=++goalDetailRequest;
  $('goal-detail').innerHTML=`${goalBackLink()}<p class="emptyState goalsEmpty">Loading goal detail…</p>`;
@@ -4097,16 +4195,31 @@ async function loadGoalDetail(id){
  if(request!==goalDetailRequest)return;
  if(!data.ok||!GOALS){$('goal-detail').innerHTML=`${goalBackLink()}<p class="emptyState goalsEmpty">${esc(data.error||'Goal detail is unavailable right now.')}</p>`;return;}
  $('goal-detail').innerHTML=renderGoalDetail(data);
+ goalDetailData=data;drawGoalTrend();const chart=$('goals-trend-chart');if(chart)chartResizeObserver.observe(chart);
  window.scrollTo(0,0);$('goal-detail-heading')?.focus({preventScroll:true});
 }
 function goalTrendChart(g,trend){
- const points=(trend||[]).filter(p=>p.value!==null&&Number.isFinite(Number(p.value)));
- if(points.length<2)return '<p class="emptyState goalsEmpty">Not enough days with evidence for a trend yet.</p>';
- const days=trend.map(p=>p.day),values=points.map(p=>Number(p.value)),target=Number(g.target),low=Math.min(...values,target),high=Math.max(...values,target),span=high-low||1;
- const x=day=>(days.indexOf(day)/Math.max(1,days.length-1)*600).toFixed(1),y=v=>(152-(v-low)/span*144).toFixed(1);
- const label=`${goalLabel(g.metric)} to date from ${goalValue(values[0],g.metric)} to ${goalValue(values.at(-1),g.metric)}; target ${goalValue(target,g.metric)}`;
- return `<svg class=goalTrend viewBox="0 0 600 160" preserveAspectRatio=none role=img aria-label="${esc(label)}"><line x1=0 x2=600 y1="${y(target)}" y2="${y(target)}" class=goalSparkTarget /><polyline class=goalSparkLine points="${points.map(p=>`${x(p.day)},${y(Number(p.value))}`).join(' ')}" /></svg>`
-  +`<div class=goalTrendAxis><span>${esc(days[0])}</span><span>Dashed line: target ${esc(goalValue(target,g.metric))}</span><span>${esc(days.at(-1))}</span></div>`;
+ const days=(trend||[]).map(p=>p.day);
+ if(!days.length)return '<p class="emptyState goalsEmpty">No daily evidence yet.</p>';
+ return `<div class=efficiencyChartWrap><svg class="goalTrend efficiencyChart" id=goals-trend-chart preserveAspectRatio=none role=img tabindex=0 aria-label="${esc(goalLabel(g.metric))} to date. Use arrow keys to inspect values." aria-describedby=goals-trend-status></svg><div class="efficiencyChartTip chartTip goalTrendTip" id=goals-trend-tip role=tooltip hidden></div><span class=efficiencyChartStatus id=goals-trend-status aria-live=polite></span></div>`
+  +`<div class=goalTrendAxis><span>${esc(days[0])}</span><span>Dashed line: target ${esc(goalValue(g.target,g.metric))}</span><span>${esc(days.at(-1))}</span></div>`;
+}
+function drawGoalTrend(){
+ const svg=$('goals-trend-chart');if(!svg||!goalDetailData)return;
+ const g=goalDetailData.goal,samples=goalDetailData.trend||[],tip=$('goals-trend-tip'),status=$('goals-trend-status'),width=Math.max(1,Math.round(svg.clientWidth)),height=Math.max(1,Math.round(svg.clientHeight)),target=Number(g.target),known=p=>p.value!==null&&Number.isFinite(p.value),values=samples.filter(known).map(p=>p.value),low=Math.min(0,target,...values),high=Math.max(target,...values,low+1),span=high-low,pad=10,plot=Math.max(1,width-pad*2),x=index=>pad+(samples.length===1?plot/2:index*plot/(samples.length-1)),y=value=>height-pad-(value-low)/span*Math.max(1,height-pad*2);
+ svg.setAttribute('viewBox',`0 0 ${width} ${height}`);tip.hidden=true;status.textContent='';
+ let html=`<line class=goalSparkTarget x1="${pad}" x2="${width-pad}" y1="${y(target)}" y2="${y(target)}"/>`,segment=[];
+ const finish=()=>{if(segment.length===1)html+=`<circle class=efficiencyChartDot cx="${segment[0][0]}" cy="${segment[0][1]}" r=3.5/>`;else if(segment.length)html+=`<polyline class=goalSparkLine points="${segment.map(p=>p.join(',')).join(' ')}"/>`;segment=[];};
+ samples.forEach((p,i)=>{if(known(p))segment.push([x(i).toFixed(1),y(p.value).toFixed(1)]);else finish();});finish();
+ if(!values.length)html+=`<text class=efficiencyChartEmpty x=10 y="${height/2}">No daily evidence</text>`;
+ svg.innerHTML=html+`<g class=efficiencyChartInspect visibility=hidden><line class=efficiencyChartInspectLine y1="${pad}" y2="${height-pad}"/><circle class=efficiencyChartInspectDot r=4/></g>`;
+ const inspect=svg.querySelector('.efficiencyChartInspect'),line=inspect.querySelector('line'),dot=inspect.querySelector('circle');let active=samples.length-1;
+ const hide=()=>{inspect.setAttribute('visibility','hidden');tip.hidden=true;status.textContent='';};
+ const show=(index,announce=false)=>{const p=samples[index];if(!p)return;active=index;const px=x(index),value=known(p)?goalValue(p.value,g.metric):'No data',text=`${p.day} · ${value} to date · target ${goalValue(target,g.metric)}`;inspect.setAttribute('visibility','visible');line.setAttribute('x1',px);line.setAttribute('x2',px);dot.setAttribute('visibility',known(p)?'visible':'hidden');if(known(p)){dot.setAttribute('cx',px);dot.setAttribute('cy',y(p.value));}tip.textContent=text;tip.hidden=false;const edge=Math.min(width/2,tip.offsetWidth/2+8);tip.style.left=`${Math.max(edge,Math.min(width-edge,px))}px`;if(announce)status.textContent=text;};
+ svg.onpointermove=event=>{const rect=svg.getBoundingClientRect(),local=(event.clientX-rect.left)*width/Math.max(1,rect.width);show(Math.max(0,Math.min(samples.length-1,Math.round((local-pad)/plot*Math.max(0,samples.length-1)))));};
+ svg.onpointerleave=hide;svg.onblur=hide;svg.onfocus=()=>show(samples.length-1,true);
+ svg.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();show(efficiencyChartKeyIndex(event.key,active,samples.length),true);};
+ if(document.activeElement===svg)show(active,true);
 }
 function goalDriverRows(rows,valueText){
  return rows.map(r=>`<div class=goalDriverRow><span title="${esc(r.label)}">${esc(r.label)}</span><div class=goalDriverBar><i style="width:${Math.max(0,Math.min(100,Number(r.share)||0)).toFixed(1)}%"></i></div><b>${esc(valueText(r))}</b></div>`).join('');
@@ -4115,12 +4228,26 @@ function goalDriversCard(g,drivers){
  const metric=g.metric,parts=[];
  if(metric==='cost_per_1k_lines'){
   const repos=drivers.by_repository||[],top=Math.max(0,...repos.map(r=>r.cost));
-  parts.push(repos.length?`<h5>By repository</h5>${goalDriverRows(repos.map(r=>({...r,share:top?r.cost/top*100:0})),r=>`${goalValue(r.value,metric)} · ${f(r.lines)} lines · ${money(r.cost)}`)}`:'<p class=goalDriverNote>No repository had both pushes and agent spend in this period.</p>');
+  parts.push(repos.length?`<h5>By repository</h5>${goalDriverRows(repos.map(r=>({...r,share:top?r.cost/top*100:0})),r=>`${goalValue(r.value,metric)} · ${f(r.lines)} lines · ${money(r.cost)}`)}`:'<p class=goalDriverNote>No repository had both measured Git coverage and agent spend in this period.</p>');
+  const coverage=drivers.repository_coverage;
+  if(coverage){
+   parts.push(`<p class=goalDriverNote>${f(coverage.included)} of ${f(coverage.discovered)} discovered repositories included${g.measurement?.counted_share!==null&&g.measurement?.counted_share!==undefined?` · ${g.measurement.counted_share.toFixed(0)}% of agent spend covered`:''}. All projects includes every eligible discovered repository, including those outside this preview.</p>`);
+   if(coverage.omitted)parts.push(`<p class=goalDriverNote>Showing the top ${f(repos.length)} by spend. ${f(coverage.omitted)} more comparable repositories contribute to the total.</p>`);
+   parts.push(`<details class=goalsPrevious><summary>Repository evidence</summary><p class=goalDriverNote>${esc(`${coverage.start} to ${coverage.end}. ${coverage.available?(coverage.stale?'Git history is stale.':'Git evidence available.'):'Git history unavailable.'} Repositories require spend evidence and measured Git coverage; membership does not depend on meeting the target.`)}</p>`
+    +((coverage.rows||[]).length?`<div class=deliveryTableWrap><table class=tbl><thead><tr><th>Repository</th><th>Evidence</th><th>Spend</th><th>Pushed lines</th></tr></thead><tbody>${coverage.rows.map(r=>{const evidence=deliveryProjectEvidence(r);return `<tr><td>${esc(r.label)}</td><td>${esc(evidence.label)}${r.availability.partial?' · partial':''}</td><td>${r.availability.cost?money(r.cost):'--'}</td><td>${r.availability.code_pushed?f(r.lines):'--'}</td></tr>`;}).join('')}</tbody></table></div>`:'<p class=emptyState>No published repository evidence yet.</p>')
+    +((coverage.limits||[]).length?`<p class=goalDriverNote>${esc(coverage.limits.map(code=>({repository_limit:'Repository discovery limit reached.',scan_limited:'Git history scan was limited.',no_push_history:'Some discovered history has no recorded push evidence.'})[code]).join(' '))}</p>`:'')
+    +'<p class=goalDriverNote>Zero lines means measured Git history with no changed lines in this period. “--” means unavailable. Discovery follows local agent activity, up to '+f(coverage.repository_limit)+' repositories; it does not scan every repository on disk. Sessions outside repository folders are not attributed. The Git page has its own selected history range.</p><a class=tbtn href="#git">Open Git</a></details>');
+  }
+ }else if(metric==='tokens'){
+  const tokens=drivers.token_drivers||{};
+  if((tokens.by_model||[]).length)parts.push(`<h5>By model, share of tokens</h5>${goalDriverRows(tokens.by_model,r=>`${goalValue(r.tokens,metric)} · ${r.share.toFixed(0)}%`)}`);
+  if((tokens.by_agent||[]).length>1)parts.push(`<h5>By app</h5>${goalDriverRows(tokens.by_agent,r=>`${goalValue(r.tokens,metric)} · ${r.share.toFixed(0)}%`)}`);
+  if(tokens.omitted)parts.push(`<p class=goalDriverNote>${f(tokens.omitted)} more models contribute to the total.</p>`);
  }else{
   const ratio=['output_per_dollar','context_load','reasoning_ratio'].includes(metric);
   if((drivers.by_model||[]).length)parts.push(`<h5>By model, share of spend</h5>${goalDriverRows(drivers.by_model,r=>`${money(r.cost)} · ${r.share.toFixed(0)}%${ratio&&r.value!==null?` · ${goalValue(r.value,metric)}`:''}`)}`);
   if((drivers.by_effort||[]).length)parts.push(`<h5>By reasoning effort</h5>${goalDriverRows(drivers.by_effort.map(r=>({...r,label:r.effort.charAt(0).toUpperCase()+r.effort.slice(1)})),r=>`${money(r.cost)} · ${r.share.toFixed(0)}%`)}`);
-  if((drivers.by_agent||[]).length>1)parts.push(`<h5>By agent</h5>${goalDriverRows(drivers.by_agent,r=>`${money(r.cost)} · ${r.share.toFixed(0)}%`)}`);
+  if((drivers.by_agent||[]).length>1)parts.push(`<h5>By app</h5>${goalDriverRows(drivers.by_agent,r=>`${money(r.cost)} · ${r.share.toFixed(0)}%`)}`);
   if(drivers.cache_hit!==null&&drivers.cache_hit!==undefined)parts.push(`<p class=goalDriverNote>${esc(`${drivers.cache_hit.toFixed(0)}% of processed input came from cache.`)}</p>`);
  }
  return `<section class="card goalDetailCard"><h4>What is driving it</h4>${parts.join('')||'<p class=goalDriverNote>No breakdown is available for this period yet.</p>'}</section>`;
@@ -4132,7 +4259,8 @@ function goalCoachingCard(tips){
 function goalContributorsCard(g,contributors){
  const items=contributors?.items||[],basis=contributors?.basis||'cost';
  if(!items.length)return '';
- const amount=c=>basis==='cost'?money(c.cost||0):`${compactNumber(basis==='input tokens'?c.input_tokens:c.reasoning_tokens)} tokens`;
+ if(g.metric==='cost_per_1k_lines')return `<section class="card goalDetailCard"><h4>Biggest contributors</h4><p class=goalDriverNote>Repositories ranked by covered spend, ${esc(contributors.start)} to ${esc(contributors.end)}. ${f(contributors.repositories)} repositories in total; showing ${f(items.length)}. Lines pushed counts additions plus deletions. Rates require at least 50 lines and positive spend.</p><div class=deliveryTableWrap><table class=tbl><thead><tr><th>Repository</th><th>Spend</th><th>Lines pushed</th><th>Cost per 1K pushed lines</th><th>Spend share</th></tr></thead><tbody>${items.map(c=>`<tr><td>${esc(c.label)}${c.partial?' · partial':''}</td><td>${money(c.cost)}</td><td>${f(c.lines)}</td><td>${esc(goalValue(c.value,g.metric))}</td><td>${c.share===null?'--':c.share.toFixed(0)+'%'}</td></tr>`).join('')}</tbody><tfoot><tr><th>All included repositories</th><td>${money(contributors.total_cost)}</td><td>${f(contributors.total_lines)}</td><td>${esc(goalValue(g.measurement?.value,g.metric))}</td><td>${contributors.total_cost>0?'100%':'--'}</td></tr></tfoot></table></div></section>`;
+ const amount=c=>basis==='cost'?money(c.cost||0):`${compactNumber(basis==='tokens'?c.tokens:basis==='input tokens'?c.input_tokens:c.reasoning_tokens)} tokens`;
  return `<section class="card goalDetailCard"><h4>Biggest contributors</h4><p class=goalDriverNote>${esc(`Sessions that moved this goal most this period, by ${basis}. ${contributors.sessions} sessions in total.`)}</p><table class=tbl><thead><tr><th>Session</th><th>Last day</th><th>Model</th><th>Effort</th><th>Executions</th><th>${esc(basis==='cost'?'Cost':'Tokens')}</th><th>Share</th><th></th></tr></thead><tbody>${items.map(c=>`<tr><td>${esc(c.title)}<br><small>${esc(c.agent)}</small></td><td>${esc(c.last_day)}</td><td>${esc(c.model)}</td><td>${esc(c.effort||'--')}</td><td>${f(c.executions)}</td><td>${esc(amount(c))}</td><td>${c.share.toFixed(0)}%</td><td><a href="${esc(sessionRoute(c.id))}">Open</a></td></tr>`).join('')}</tbody></table></section>`;
 }
 function renderGoalDetail(d){
@@ -4141,11 +4269,11 @@ function renderGoalDetail(d){
  const tiles=[
   ['Current',goalValue(m.value,metric),GOAL_CONFIDENCE[m.confidence]||''],
   [g.comparison==='at_most'?'Target, at most':'Target, at least',goalValue(g.target,metric),option?.label||'Custom'],
-  m.projected!==undefined?['Projected',money(m.projected),'At the current pace']:null,
+  m.projected!==undefined?['Projected',goalValue(m.projected,metric),'At the current pace']:null,
   g.baseline?.value!==null&&g.baseline?.value!==undefined?[g.baseline.label||'Reference',goalValue(g.baseline.value,metric),`${g.baseline.start} to ${g.baseline.end}`]:null,
  ].filter(Boolean);
  const reason=[g.status_reason,g.progress?.early?'Early in the period':'',goalGuardrail(g)?`Watch: ${goalGuardrail(g)}`:''].filter(Boolean).join(' · ');
- return `<div class=goalDetailHead>${goalBackLink()}<div class=goalDetailTitle><h3 id=goal-detail-heading tabindex=-1>${esc(goalTitle(g))}</h3><p class=goalMeta>${esc(scope)} · ${esc(goalLabel(metric))} · ${esc(g.start)} to ${esc(g.end)}${g.repeat?` · Repeats every ${esc(g.period)}`:''}</p></div><span class="chip goalStatus ${esc(g.status)}">${esc(GOAL_STATUS_LABELS[g.status]||g.status)}</span><button class=tbtn type=button data-goal-edit="${esc(g.id)}">Edit</button></div>`
+ return `<div class=goalDetailHead>${goalBackLink()}<div class=goalDetailTitle><h3 id=goal-detail-heading tabindex=-1>${esc(goalTitle(g))}</h3><p class=goalMeta>${esc(scope)} · ${esc(goalLabel(metric))} · ${esc(g.start)} to ${esc(g.end)}${g.repeat?` · Repeats every ${esc(g.period)}`:''}</p></div><span class="chip goalStatus ${esc(g.status)}">${esc(GOAL_STATUS_LABELS[g.status]||g.status)}</span><button class=tbtn type=button data-goal-edit="${esc(g.id)}">Edit</button><button class=tbtn type=button data-goal-duplicate="${esc(g.id)}">Duplicate</button></div>`
   +`<div class=goalDetailSummary>${tiles.map(([label,value,note])=>`<div class="card metric goalDetailMetric"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`).join('')}</div>`
   +(reason?`<p class=goalDetail>${esc(reason)}</p>`:'')
   +`<section class="card goalDetailCard"><h4>${esc(goalLabel(metric))} to date</h4>${goalTrendChart(g,d.trend)}</section>`
@@ -7263,7 +7391,7 @@ $('s-chart-inner').onkeydown=event=>{
 // Pixel-viewBox charts redraw when their box changes (resize, or first shown after a hidden render)
 // so text and marks stay undistorted. Redrawing sets viewBox to the box, so this settles.
 let chartResizeTimer=0;
-const PIXEL_CHARTS={spend:['s-scatter-svg'],git:['d-daily-chart'],models:['m-chart','m-mix','m-speedchart-svg'],efficiency:['e-output-dollar-chart','e-reasoning-chart','e-context-load-chart','e-cache-hit-chart'],session:['iochart']};
+const PIXEL_CHARTS={spend:['s-scatter-svg'],git:['d-daily-chart'],models:['m-chart','m-mix','m-speedchart-svg'],goals:['goals-trend-chart'],efficiency:['e-output-dollar-chart','e-reasoning-chart','e-context-load-chart','e-cache-hit-chart'],session:['iochart']};
 const chartViewBoxStale=id=>{const svg=$(id);if(!svg||!svg.clientWidth||!svg.clientHeight)return false;const box=svg.viewBox.baseVal;return Math.abs(box.width-Math.round(svg.clientWidth))>1||Math.abs(box.height-Math.round(svg.clientHeight))>1;};
 const chartResizeObserver=new ResizeObserver(()=>{
  clearTimeout(chartResizeTimer);
@@ -7273,6 +7401,7 @@ const chartResizeObserver=new ResizeObserver(()=>{
   if(CURRENT&&PIXEL_CHARTS.session.some(chartViewBoxStale))drawIO(CURRENT.series||[]);
   if(spendInsightPayload&&PIXEL_CHARTS.spend.some(chartViewBoxStale))drawSpendScatter(spendInsightPayload.sessions||[]);
   if(deliveryPayload&&PIXEL_CHARTS.git.some(chartViewBoxStale))drawDeliveryChart(deliveryPayload.days||[]);
+  if(goalDetailData&&PIXEL_CHARTS.goals.some(chartViewBoxStale))drawGoalTrend();
  },120);
 });
 Object.values(PIXEL_CHARTS).flat().forEach(id=>{const svg=$(id);if(svg)chartResizeObserver.observe(svg);});

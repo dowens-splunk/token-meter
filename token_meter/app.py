@@ -130,6 +130,8 @@ from token_meter.services.goals import (
     native_summary as native_goal_summary,
     preview as preview_goal,
     project as project_goals,
+    model_choices as goal_model_choices,
+    normalize_store as normalize_goal_store,
     model_inventory as goal_model_inventory,
     session_key as goal_session_key,
     starters as goal_starters,
@@ -1868,7 +1870,8 @@ def goal_evidence(cross):
     active = {goal_session_key(row) for row in cross.get("current_sessions") or ()
               if row.get("activity_state") == "working"}
     service = git_delivery_service()
-    key = (id(rows), len(rows), _xsess.get("at"), service.last_checked())
+    key = (id(rows), len(rows), _xsess.get("at"), service.last_checked(),
+           _SOURCE_INVENTORY.get("revision"), _SOURCE_INVENTORY.get("git_delivery_candidates_revision"))
     with _goal_evidence_lock:
         if _goal_evidence_cache["key"] != key:
             _goal_evidence_cache.update(key=key, value=_prepare_goal_evidence(rows, service))
@@ -1877,10 +1880,8 @@ def goal_evidence(cross):
 
 
 def _prepare_goal_evidence(rows, service):
-    candidates = git_delivery_candidates(_SOURCE_INVENTORY.get("sources") or ())
-    labels, _canonical = service.project_labels(
-        sorted({candidate["project"] for candidate in candidates}), candidates,
-    )
+    candidates = cached_git_delivery_candidates()[:MAX_REPOSITORIES]
+    labels = sorted({candidate["project"] for candidate in candidates})
     spend_rows = delivery_spend_rows(rows)
     results = {}
 
@@ -1888,9 +1889,9 @@ def _prepare_goal_evidence(rows, service):
         key = (start, end)
         if key not in results:
             result = service.query_window("", start, end, spend_rows, labels, candidates)
-            checked = (result.get("coverage") or {}).get("last_checked")
-            result["stale"] = checked is None or time.time() - float(checked) > GIT_DELIVERY_INTERVAL_S * 2
             results[key] = result
+        checked = (results[key].get("coverage") or {}).get("last_checked")
+        results[key]["stale"] = checked is None or time.time() - float(checked) > GIT_DELIVERY_INTERVAL_S * 2
         return results[key]
     return goal_model_inventory(rows), git_query
 
@@ -1912,6 +1913,12 @@ def build_goals(raw, *, cross=None, include_starters=True, detail=True, today=No
 def goals_state(params=None):
     params = params or {}
     try:
+        if params.get("models"):
+            rows, _active, models, _git_query = goal_evidence(cross_session())
+            store = normalize_goal_store(goal_settings(), goal_agents())
+            return {"ok": True, **goal_model_choices(rows, models, goal_agents(), store["items"],
+                                                    datetime.date.today(), params.get("runtime", ""),
+                                                    params.get("query", ""))}
         if params.get("goal"):
             cross = cross_session()
             rows, active, _models, git_query = goal_evidence(cross)
@@ -1974,7 +1981,8 @@ def refresh_goal_cache():
     service = _git_delivery_service_instance
     git_revision = service.last_checked() if service is not None else None
     today = datetime.date.today()
-    signature = (_xsess.get("at"), settings_revision, today, git_revision)
+    git_stale = git_revision is None or time.time() - float(git_revision) > GIT_DELIVERY_INTERVAL_S * 2
+    signature = (_xsess.get("at"), settings_revision, today, git_revision, git_stale)
     previous = _goal_cache["signature"]
     if signature == previous:
         return
@@ -10691,9 +10699,11 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/goals":
             params = parse_qs(parsed.query)
-            fields = ("goal", "preview", "metric", "scope_kind", "scope_key", "period", "start", "end")
+            fields = ("goal", "preview", "metric", "scope_kind", "scope_key", "scope_keys", "period", "start", "end",
+                      "models", "runtime", "query")
             self._send(json.dumps(goals_state({
-                field: (params.get(field) or [""])[0][:80] for field in fields
+                field: (params.get(field) or [""])[0][:2200 if field == "scope_keys" else 120 if field == "query" else 80]
+                for field in fields
             })), "application/json")
         elif req_path == "/spend/logs":
             query = parse_qs(parsed.query)

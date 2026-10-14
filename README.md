@@ -117,10 +117,13 @@ drill into individual runs from **Sessions → Subagents**.
 ### Goals
 
 Set a target for Spend, Output / $, Cost per 1K pushed lines, Context load,
-Reasoning ratio, or Frontier share from **Efficiency → Goals**, for all agents,
-one agent, or one of your main models. Targets start from the previous period,
-goals can repeat weekly or monthly, and progress also shows on Spend, Git, and
-the menu bar or tray. See [goal measurements](specs/GOALS.md).
+Reasoning ratio, Frontier share, or Tokens used from **Efficiency → Goals**.
+Choose an app and one or more models, a period, and a target based on your previous usage.
+Inspect goal charts by hovering or using arrow keys. Delivery contributors show
+repository spend and lines pushed; coverage explains which repositories count.
+Hold your current level, repeat calendar goals, or duplicate a previous goal.
+Progress also shows on Spend, Git, and the menu bar or tray.
+See [goal measurements](specs/GOALS.md).
 
 ### Budgets, settings, and MCP
 

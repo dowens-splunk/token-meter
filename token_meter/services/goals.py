@@ -1,28 +1,34 @@
 """Deterministic metric goals over local, content free session evidence."""
 
 import datetime
+import json
 import hashlib
 import math
 import re
 import uuid
 
 from token_meter.domain.aggregates import session_model_reasoning_efforts
+from token_meter.domain.usage import MAX_SAFE_TOKEN_COUNT
 from token_meter.models.tiers import model_tier
+from token_meter.services.git_delivery import MAX_QUERY_PROJECTS, MAX_REPOSITORIES
 
 
 MAX_GOALS = 50
+MAX_SELECTED_MODELS = 32
 MAX_PERIOD_DAYS = 366
 MIN_PUSHED_LINES = 50
 EARLY_FRACTION = 0.2
 
 METRICS = {
-    "spend": {"label": "Spend", "unit": "usd", "scopes": ("all", "agent", "model")},
-    "output_per_dollar": {"label": "Output / $", "unit": "tokens_per_usd", "scopes": ("all", "agent", "model"),
+    "spend": {"label": "Spend", "unit": "usd", "scopes": ("all", "agent", "model", "models"), "cumulative": True},
+    "tokens": {"label": "Tokens used", "unit": "tokens", "scopes": ("all", "agent", "model", "models"),
+               "cumulative": True},
+    "output_per_dollar": {"label": "Output / $", "unit": "tokens_per_usd", "scopes": ("all", "agent", "model", "models"),
                           "direction": "at_least"},
     "cost_per_1k_lines": {"label": "Cost per 1K pushed lines", "unit": "usd_per_1k_lines", "scopes": ("all",),
                           "direction": "at_most"},
-    "context_load": {"label": "Context load", "unit": "ratio", "scopes": ("all", "agent", "model")},
-    "reasoning_ratio": {"label": "Reasoning ratio", "unit": "percent", "scopes": ("all", "agent", "model")},
+    "context_load": {"label": "Context load", "unit": "ratio", "scopes": ("all", "agent", "model", "models")},
+    "reasoning_ratio": {"label": "Reasoning ratio", "unit": "percent", "scopes": ("all", "agent", "model", "models")},
     "frontier_share": {"label": "Frontier share", "unit": "percent", "scopes": ("all", "agent")},
 }
 PERCENT_METRICS = {"reasoning_ratio", "frontier_share"}
@@ -45,6 +51,10 @@ TARGET_OPTIONS = {
 }
 TARGET_OPTIONS["cost_per_1k_lines"] = TARGET_OPTIONS["spend"]
 TARGET_OPTIONS["frontier_share"] = TARGET_OPTIONS["reasoning_ratio"]
+TARGET_OPTIONS["tokens"] = TARGET_OPTIONS["spend"]
+for _metric in ("output_per_dollar", "context_load", "reasoning_ratio", "frontier_share"):
+    TARGET_OPTIONS[_metric] += (("hold", "Hold current level",
+                                "at_least" if _metric == "output_per_dollar" else "at_most", "relative", 0),)
 
 STARTERS = (
     ("Cut {agent} spend 10%", "spend", "codex", "cut_10"),
@@ -82,6 +92,40 @@ def model_inventory(rows):
             if runtime and model and not model.lower().startswith("unknown"):
                 inventory.setdefault(model_key(runtime, model), {"runtime": runtime, "model": model})
     return inventory
+
+
+def _scope_keys(scope):
+    return [scope["key"]] if scope["kind"] == "model" else scope.get("keys", []) if scope["kind"] == "models" else []
+
+
+def _model_keys(value):
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_SELECTED_MODELS \
+            or any(not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key) for key in value):
+        raise ValueError(f"Choose between 1 and {MAX_SELECTED_MODELS} observed models.")
+    return sorted(set(value))
+
+
+def _resolve_scope(scope, inventory):
+    if scope["kind"] == "model":
+        return {**scope, **inventory.get(scope["key"], {"runtime": None, "model": None})}
+    if scope["kind"] == "models":
+        keys = scope["keys"]
+        return {**scope, "selection": [inventory[key] for key in keys] if all(key in inventory for key in keys) else []}
+    return scope
+
+
+def _row_models(row, scope):
+    """None means all models; an empty set means no matching selected model."""
+    if scope["kind"] == "model":
+        return {scope["model"]} if row.get("provider") == scope.get("runtime") and scope.get("model") else set()
+    if scope["kind"] == "models":
+        return {item["model"] for item in scope.get("selection", []) if item["runtime"] == row.get("provider")}
+    return None
+
+
+def _scope_unavailable(scope):
+    return (scope["kind"] == "model" and not scope.get("model")) \
+        or (scope["kind"] == "models" and not scope.get("selection"))
 
 
 def _text(value, label, limit):
@@ -129,6 +173,14 @@ def _count(value):
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _daily_tokens(daily, available):
+    """Known processed I/O; cache and reasoning are already included in these counts."""
+    if not (available or daily.get("input_evidence") is True or daily.get("output_evidence") is True
+            or _count(daily.get("token_covered_executions")) > 0):
+        return None
+    return _count(daily.get("input_tokens")) + _count(daily.get("output_tokens"))
 
 
 def _month_end(first):
@@ -180,8 +232,8 @@ def normalize_goal(value, agents, existing=None):
     if kind not in METRICS[metric]["scopes"]:
         raise ValueError("Pushed lines are measured across all projects; lines cannot be split by agent or model."
                          if metric == "cost_per_1k_lines" else
-                         "Frontier share is always 0% or 100% for one model; choose all agents or one agent."
-                         if metric == "frontier_share" and kind == "model" else "Choose a supported scope.")
+                         "Frontier share compares all models; choose all apps or one app."
+                         if metric == "frontier_share" and kind in ("model", "models") else "Choose a supported scope.")
     key = ""
     if kind == "agent":
         key = scope.get("key")
@@ -191,13 +243,20 @@ def normalize_goal(value, agents, existing=None):
         key = scope.get("key")
         if not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key):
             raise ValueError("Choose an observed model.")
+    elif kind == "models":
+        keys = _model_keys(scope.get("keys"))
     comparison = value.get("comparison")
     if comparison not in ("at_most", "at_least"):
         raise ValueError("Choose At most or At least.")
     if METRICS[metric].get("direction", comparison) != comparison:
         raise ValueError(f"{METRICS[metric]['label']} targets use "
                          f"{'At most' if METRICS[metric]['direction'] == 'at_most' else 'At least'}.")
-    target = _number(value.get("target"), "Target", 100 if metric in PERCENT_METRICS else 1e9)
+    target = _number(value.get("target"), "Target",
+                     MAX_SAFE_TOKEN_COUNT if metric == "tokens" else 100 if metric in PERCENT_METRICS else 1e9)
+    if metric == "tokens":
+        if not target.is_integer():
+            raise ValueError("Token targets must be whole numbers.")
+        target = int(target)
     period = value.get("period")
     if period not in ("week", "month", "custom"):
         raise ValueError("Choose This week, This month, or Custom.")
@@ -207,10 +266,13 @@ def normalize_goal(value, agents, existing=None):
     option = value.get("target_option") or "custom"
     if option != "custom" and option not in {row[0] for row in TARGET_OPTIONS[metric]}:
         raise ValueError("Choose a supported target option.")
+    if option == "hold" and comparison != next(row[2] for row in TARGET_OPTIONS[metric] if row[0] == "hold"):
+        raise ValueError("Hold current level uses the displayed target direction.")
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return {
         "id": existing["id"] if existing else uuid.uuid4().hex,
-        "type": "metric", "metric": metric, "scope": {"kind": kind, "key": key},
+        "type": "metric", "metric": metric,
+        "scope": {"kind": kind, "key": key, **({"keys": keys} if kind == "models" else {})},
         "comparison": comparison, "target": target, "target_option": option,
         "period": period, "start": start.isoformat(), "end": end.isoformat(),
         "repeat": value.get("repeat") is True and period in ("week", "month"),
@@ -257,8 +319,9 @@ def apply_action(raw, action, agents, model_keys, today):
         if old is None and len(store["items"]) >= MAX_GOALS:
             raise ValueError(f"Token Meter keeps at most {MAX_GOALS} goals.")
         record = normalize_goal(action.get("goal"), agents, old)
-        if record["scope"]["kind"] == "model" and record["scope"]["key"] not in model_keys:
-            raise ValueError("The selected model is unavailable.")
+        retained = set(_scope_keys(old["scope"])) if old else set()
+        if any(key not in model_keys and key not in retained for key in _scope_keys(record["scope"])):
+            raise ValueError("A selected model is unavailable.")
         if old and old.get("repeat") and record["repeat"] and old["period"] == record["period"]:
             # The browser edits the current period; keep the series anchor so history survives.
             record["start"], record["end"] = old["start"], old["end"]
@@ -301,15 +364,16 @@ def _overlaps(row, start, end):
 def _in_scope(row, scope):
     kind = scope["kind"]
     return (kind == "all" or kind == "agent" and row.get("provider") == scope["key"]
-            or kind == "model" and row.get("provider") == scope.get("runtime"))
+            or kind in ("model", "models") and bool(_row_models(row, scope)))
 
 
 def _active_count(rows, scope, start, end, active_keys):
     return sum(1 for row in rows if _in_scope(row, scope) and session_key(row) in active_keys
-               and _overlaps(row, start, end))
+               and (_scoped_daily(row, scope, start, end) if scope["kind"] in ("model", "models")
+                    else _overlaps(row, start, end)))
 
 
-_TOTALS = ("cost", "out", "out_cost", "inp", "io_out", "rsn", "rsn_out", "frontier", "unclassified",
+_TOTALS = ("tokens", "token_exec", "cost", "out", "out_cost", "inp", "io_out", "rsn", "rsn_out", "frontier", "unclassified",
            "tier_cost", "exec", "cost_exec", "io_exec", "rsn_exec", "rsn_scope_exec")
 
 
@@ -320,18 +384,18 @@ def _collect(scope, start, end, rows, metric_available):
              "estimated": False, "reasoning_excluded": 0}
 
     def bucket(day):
-        return days.setdefault(day, dict.fromkeys(_TOTALS, 0.0))
+        return days.setdefault(day, dict.fromkeys(_TOTALS, 0))
 
-    model = scope.get("model") if scope["kind"] == "model" else None
     for row in rows:
         if not _in_scope(row, scope):
             continue
         daily = [d for d in row.get("_model_daily") or [] if isinstance(d, dict)]
         stats = [stat for stat in row.get("model_stats") or [] if isinstance(stat, dict)]
-        if model is not None:
-            # A model goal reads only that model's dated executions and their own cost.
-            daily = [d for d in daily if str(d.get("model") or "") == model]
-            stats = [stat for stat in stats if str(stat.get("model") or "") == model]
+        models = _row_models(row, scope)
+        if models is not None:
+            # Selected models read only their own dated executions and cost.
+            daily = [d for d in daily if str(d.get("model") or "") in models]
+            stats = [stat for stat in stats if str(stat.get("model") or "") in models]
             if not daily:
                 continue
             day_costs = {}
@@ -341,7 +405,7 @@ def _collect(scope, start, end, rows, metric_available):
             day_costs = {str(day): _nonnegative(cost) for day, cost in (row.get("_day_cost") or {}).items()}
         in_days = [d for d in daily if start <= str(d.get("day") or "") <= end]
         in_costs = {day: cost for day, cost in day_costs.items() if start <= day <= end}
-        if not (in_days or in_costs or model is None and _overlaps(row, start, end)):
+        if not (in_days or in_costs or models is None and _overlaps(row, start, end)):
             continue
         flags["observations"] += 1
         # Same rule as Spend provenance: locally priced cost is normal, estimated tokens are not.
@@ -354,7 +418,9 @@ def _collect(scope, start, end, rows, metric_available):
         if cost_ok:
             for day, cost in in_costs.items():
                 bucket(day)["cost"] += cost
-            if model is None and _nonnegative(row.get("cost")) > sum(day_costs.values()) + 0.01:
+            if models is None and _nonnegative(row.get("cost")) > sum(day_costs.values()) + 0.01:
+                flags["undated_cost"] += 1
+            elif models is not None and sum(_nonnegative(stat.get("cost")) for stat in stats) > sum(day_costs.values()) + 0.01:
                 flags["undated_cost"] += 1
         elif in_days or in_costs:
             flags["cost_missing"] += 1
@@ -367,6 +433,11 @@ def _collect(scope, start, end, rows, metric_available):
             count = _count(d.get("executions"))
             cost = _nonnegative(d.get("cost"))
             t["exec"] += count
+            # Daily input already includes cache; reasoning is already part of output.
+            token_count = _daily_tokens(d, tokens_ok)
+            if token_count is not None:
+                t["tokens"] += token_count
+                t["token_exec"] += count
             if cost_ok:
                 t["cost_exec"] += min(count, _count(d.get("cost_covered_executions", count)))
                 t["out"] += _count(d.get("cost_covered_output_tokens", d.get("output_tokens")))
@@ -389,7 +460,7 @@ def _collect(scope, start, end, rows, metric_available):
 
 
 def _sum(buckets):
-    total = dict.fromkeys(_TOTALS, 0.0)
+    total = dict.fromkeys(_TOTALS, 0)
     for bucket in buckets:
         for key in _TOTALS:
             total[key] += bucket[key]
@@ -398,7 +469,13 @@ def _sum(buckets):
 
 def _finish(metric, t, flags):
     observations = flags["observations"]
-    if metric == "spend":
+    if metric == "tokens":
+        num, den = t["tokens"], 1
+        value = num if t["token_exec"] else None
+        complete = not flags["undated_exec"] and t["io_exec"] >= t["exec"] > 0
+        reason = ("No token data in this period yet" if not t["token_exec"] else
+                  "" if complete else "Input and output data incomplete")
+    elif metric == "spend":
         missing = observations and flags["cost_missing"] >= observations
         value, num, den = (None if missing else t["cost"]), t["cost"], 1.0
         complete = not (flags["cost_missing"] or flags["undated_cost"])
@@ -421,11 +498,13 @@ def _finish(metric, t, flags):
         complete = not flags["undated_exec"] and t["rsn_exec"] >= t["rsn_scope_exec"] > 0
         reason = ("No sessions in scope report reasoning tokens" if not t["rsn_scope_exec"] else
                   "" if complete else "Reasoning is not reported for some executions")
-    else:
+    elif metric == "frontier_share":
         num, den = t["frontier"] * 100, t["tier_cost"]
         value = num / den if den > 0 else None
         complete = not (flags["cost_missing"] or flags["undated_cost"])
         reason = "" if complete else "Cost data incomplete"
+    else:
+        raise ValueError("Choose a supported metric.")
     if value is None and not reason:
         reason = "No data in this period yet"
     result = {"value": value, "numerator": num, "denominator": den, "complete": bool(complete),
@@ -438,7 +517,7 @@ def _finish(metric, t, flags):
 
 
 def _collection(scope, start, end, rows, metric_available, cache):
-    key = (scope["kind"], scope["key"], start, end)
+    key = (scope["kind"], scope["key"], tuple(scope.get("keys", [])), start, end)
     if cache is None or key not in cache:
         collected = _collect(scope, start, end, rows, metric_available)
         if cache is None:
@@ -447,14 +526,26 @@ def _collection(scope, start, end, rows, metric_available, cache):
     return cache[key]
 
 
+def _delivery_repositories(data):
+    """The common measured repository population for all delivery goal surfaces."""
+    return [row for row in data.get("project_rows") or [] if data.get("ok")
+            and row.get("availability", {}).get("cost") and row.get("availability", {}).get("code_pushed")]
+
+
+def _delivery_repository(row):
+    lines, cost = _count(row.get("changed_lines")), _nonnegative(row.get("covered_cost"))
+    return {"label": model_label(row.get("project")), "lines": lines, "cost": cost,
+            "value": 1000 * cost / lines if lines >= MIN_PUSHED_LINES and cost > 0 else None,
+            "partial": bool(row.get("availability", {}).get("partial"))}
+
+
 def _git_measure(scope, start, end, git_query):
     data = git_query(scope, start, end) if git_query else {"ok": False}
     if not data.get("ok"):
         return {"value": None, "numerator": 0, "denominator": 0, "covered_cost": 0, "complete": False,
                 "estimated": False, "observations": 0, "added": 0, "deleted": 0, "projects": 0,
                 "project_names": [], "reason": "Git history unavailable"}
-    comparable = [row for row in data.get("project_rows") or []
-                  if row.get("availability", {}).get("cost") and row.get("availability", {}).get("code_pushed")]
+    comparable = _delivery_repositories(data)
     lines = sum(_count(row.get("changed_lines")) for row in comparable)
     cost = sum(_nonnegative(row.get("covered_cost")) for row in comparable)
     partial = any(row.get("availability", {}).get("partial") for row in comparable)
@@ -470,13 +561,16 @@ def _git_measure(scope, start, end, git_query):
             "added": sum(_count(row.get("added")) for row in comparable),
             "deleted": sum(_count(row.get("deleted")) for row in comparable),
             "projects": len(comparable),
-            "project_names": [str(row.get("project") or "").split(" · ", 1)[0] for row in
+            "project_names": [model_label(row.get("project")) for row in
                               sorted(comparable, key=lambda row: -_count(row.get("changed_lines")))][:8],
             "reason": reason}
 
 
 def measure(metric, scope, start, end, rows, metric_available, git_query=None, cache=None):
     """Sum numerators and denominators over the whole period; gaps never become zero."""
+    if _scope_unavailable(scope):
+        return {"value": None, "numerator": 0, "denominator": 0, "complete": False,
+                "estimated": False, "observations": 0, "reason": "Selected model not seen in local history"}
     if metric == "cost_per_1k_lines":
         result = _git_measure(scope, start, end, git_query)
         # Show how much of all agent spend the repositories cover; the rest cannot count.
@@ -498,6 +592,8 @@ def series(metric, scope, start, through, rows, metric_available, git_query=None
     step = max(1, math.ceil(span / points))
     marks = {(first + datetime.timedelta(days=index)).isoformat() for index in range(0, span, step)}
     marks.add(through)
+    if _scope_unavailable(scope):
+        return [{"day": day, "value": None} for day in sorted(marks)]
     result = []
     if metric == "cost_per_1k_lines":
         data = git_query(scope, start, through) if git_query else {}
@@ -512,11 +608,11 @@ def series(metric, scope, start, through, rows, metric_available, git_query=None
                 result.append({"day": day, "value": 1000 * cost / lines if lines >= MIN_PUSHED_LINES and cost > 0 else None})
         return result
     days, flags = _collection(scope, start, through, rows, metric_available, cache)
-    running = dict.fromkeys(_TOTALS, 0.0)
+    running = dict.fromkeys(_TOTALS, 0)
     for index in range(span):
         day = (first + datetime.timedelta(days=index)).isoformat()
         for key in _TOTALS:
-            running[key] += (days.get(day) or {}).get(key, 0.0)
+            running[key] += (days.get(day) or {}).get(key, 0)
         if day in marks:
             result.append({"day": day, "value": _finish(metric, running, flags)["value"]})
     return result
@@ -528,12 +624,17 @@ def target_options(metric, baseline):
     options = []
     for option_id, label, comparison, kind, change in TARGET_OPTIONS[metric]:
         if kind == "relative":
-            if baseline <= 0:
+            if baseline <= 0 and option_id != "hold":
                 continue
             target = baseline * (1 + change / 100)
         else:
             target = baseline + change
             if not 0 <= target <= 100:
+                continue
+        if metric == "tokens":
+            whole = math.floor(target)
+            target = whole + int(target - whole >= 0.5)
+            if target > MAX_SAFE_TOKEN_COUNT:
                 continue
         options.append({"id": option_id, "label": label, "comparison": comparison, "target": target})
     return options
@@ -545,7 +646,7 @@ FALLBACK_DAYS = 90
 def baseline(metric, scope, period, start, end, rows, metric_available, git_query, today, cache=None):
     """The value targets start from: the previous period, else the last 90 days, else this period so far.
 
-    Spend is scaled to the goal's period length, so the so far value becomes a projection."""
+    Cumulative metrics scale to the goal's length; a so far value becomes a projection."""
     name = {"week": "week", "month": "month"}.get(period, "period")
     first, last = baseline_window(period, start, end)
     yesterday = today - datetime.timedelta(days=1)
@@ -562,7 +663,9 @@ def baseline(metric, scope, period, start, end, rows, metric_available, git_quer
         evidence = measure(metric, scope, window_start.isoformat(), window_end.isoformat(), rows,
                            metric_available, git_query, cache)
         value = evidence["value"]
-        if value is not None and metric == "spend":
+        if not evidence["observations"]:
+            value = None
+        if value is not None and METRICS[metric].get("cumulative"):
             value = value / ((window_end - window_start).days + 1) * period_days
         result = {"source": source, "label": label, "start": window_start.isoformat(),
                   "end": window_end.isoformat(), "value": value,
@@ -572,7 +675,7 @@ def baseline(metric, scope, period, start, end, rows, metric_available, git_quer
             result.update(projects=evidence["project_names"], project_count=evidence["projects"],
                           counted_share=evidence["counted_share"])
         fallback = fallback or result
-        if value is not None and (value > 0 or metric in PERCENT_METRICS):
+        if value is not None and evidence["observations"]:
             return result
     return fallback or {"source": None, "label": "", "start": start.isoformat(), "end": end.isoformat(),
                         "value": None, "complete": False, "estimated": False, "reason": "Not started"}
@@ -584,14 +687,21 @@ def preview(request, agents, models, rows, metric_available, git_query, today):
     if metric not in METRICS:
         raise ValueError("Choose a supported metric.")
     kind, key = request.get("scope_kind") or "all", request.get("scope_key") or ""
+    keys = []
+    if kind == "models":
+        try:
+            keys = _model_keys(json.loads(request.get("scope_keys") or "null"))
+        except (TypeError, json.JSONDecodeError):
+            raise ValueError("Choose a supported model selection.") from None
     if kind not in METRICS[metric]["scopes"] or (kind == "agent" and key not in agents) \
-            or (kind == "model" and key not in models):
+            or (kind == "model" and not re.fullmatch(r"[0-9a-f]{64}", key)):
         raise ValueError("Choose a supported scope.")
     period = request.get("period")
     # A saved week or month keeps its own dates when edited later.
     anchor = _date(request["start"], "Start") if period in ("week", "month") and request.get("start") else today
     start, end = period_window(period, anchor, request.get("start"), request.get("end"))
-    scope = {"kind": kind, "key": key if kind != "all" else "", **(models.get(key, {}) if kind == "model" else {})}
+    scope = _resolve_scope({"kind": kind, "key": key if kind not in ("all", "models") else "",
+                            **({"keys": keys} if kind == "models" else {})}, models)
     prior = baseline(metric, scope, period, start, end, rows, metric_available, git_query, today)
     return {"ok": True, "start": start.isoformat(), "end": end.isoformat(), "baseline": prior,
             "options": target_options(metric, prior["value"])}
@@ -605,8 +715,8 @@ def goal_status(goal, evidence, today):
     value, target, at_most = evidence["value"], goal["target"], goal["comparison"] == "at_most"
     if today < start:
         return "no_result", "Starts " + goal["start"]
-    if goal["metric"] == "spend" and at_most and value is not None and value > target:
-        return "missed", "Spend is above the target"
+    if METRICS[goal["metric"]].get("cumulative") and at_most and value is not None and value > target:
+        return "missed", "Token usage is above the target" if goal["metric"] == "tokens" else "Spend is above the target"
     if today <= end:
         if value is None:
             return "no_result", evidence["reason"] or "No data in this period yet"
@@ -674,7 +784,7 @@ def _evaluate(goal, rows, metric_available, git_query, active_keys, today, cache
     total_days = (end - start).days + 1
     elapsed = max(0, min(total_days, (today - start).days + 1))
     evidence["active"] = _active_count(rows, scope, current["start"], current["end"], active_keys)
-    if goal["metric"] == "spend" and evidence["value"] is not None and 0 < elapsed < total_days:
+    if METRICS[goal["metric"]].get("cumulative") and evidence["value"] is not None and 0 < elapsed < total_days:
         evidence["projected"] = evidence["value"] / elapsed * total_days
     evidence["confidence"] = ("estimated" if evidence["estimated"] else
                               "complete" if evidence["complete"] else "partial")
@@ -743,8 +853,11 @@ MODEL_CHOICES = 15
 MODEL_SPEND_DAYS = 60
 
 
-def _model_choices(rows, inventory, agents, goals, today):
-    """The models a user mainly pays for: recent spend first, plus any a saved goal still uses."""
+def model_choices(rows, inventory, agents, goals, today, runtime="", query=""):
+    """Bounded observed choices filtered before ranking, including unpriced usage."""
+    if runtime and runtime not in agents:
+        raise ValueError("Choose a supported app.")
+    query = _text(query, "Model search", 120) or ""
     since = (today - datetime.timedelta(days=MODEL_SPEND_DAYS - 1)).isoformat()
     spend = {}
     for row in rows:
@@ -752,13 +865,14 @@ def _model_choices(rows, inventory, agents, goals, today):
             if isinstance(daily, dict) and str(daily.get("day") or "") >= since:
                 key = model_key(row.get("provider"), str(daily.get("model") or ""))
                 spend[key] = spend.get(key, 0.0) + _nonnegative(daily.get("cost"))
-    pinned = {goal["scope"]["key"] for goal in goals if goal["scope"]["kind"] == "model"}
-    ranked = sorted((key for key in inventory if spend.get(key, 0) > 0 or key in pinned),
+    pinned = {key for goal in goals for key in _scope_keys(goal["scope"])}
+    ranked = sorted((key for key in inventory if (not runtime or inventory[key]["runtime"] == runtime)
+                     and query.casefold() in model_label(inventory[key]["model"]).casefold()),
                     key=lambda key: (-spend.get(key, 0), inventory[key]["model"]))
     shown = ranked[:MODEL_CHOICES] + [key for key in ranked[MODEL_CHOICES:] if key in pinned]
-    return [{"key": key, "runtime": inventory[key]["runtime"],
+    return {"models": [{"key": key, "runtime": inventory[key]["runtime"],
              "label": f"{agents.get(inventory[key]['runtime'], inventory[key]['runtime'])} · {model_label(inventory[key]['model'])}",
-             "recent_spend": round(spend.get(key, 0), 2)} for key in shown]
+             "recent_spend": round(spend.get(key, 0), 2)} for key in shown], "total": len(ranked)}
 
 
 def project(raw, rows, agents, metric_available, git_query, active_keys, budgets, today,
@@ -772,19 +886,22 @@ def project(raw, rows, agents, metric_available, git_query, active_keys, budgets
     goals = []
     for goal in store["items"]:
         scope = goal["scope"]
-        if scope["kind"] == "model" and scope["key"] not in inventory:
-            item = {**goal, "status": "no_result", "status_reason": "Model not seen in local history", "progress": {},
+        missing = any(key not in inventory for key in _scope_keys(scope))
+        if missing:
+            item = {**goal, "status": "no_result", "status_reason": "Selected model not seen in local history", "progress": {},
                     "series_start": goal["start"],
                     "measurement": {"value": None, "complete": False, "estimated": False, "observations": 0,
-                                    "confidence": "partial", "active": 0, "reason": "Model not seen in local history"}}
+                                    "confidence": "partial", "active": 0, "reason": "Selected model not seen in local history"}}
         else:
-            resolved = {**goal, "scope": {**scope, **inventory.get(scope["key"], {})}} if scope["kind"] == "model" else goal
+            resolved = {**goal, "scope": _resolve_scope(scope, inventory)}
             item = _evaluate(resolved, rows, metric_available, git_query, active_keys, today, cache, detail)
             item["scope"] = scope
         model = inventory.get(scope["key"]) if scope["kind"] == "model" else None
         item["scope_label"] = ("All projects" if goal["metric"] == "cost_per_1k_lines"
-                               else "All agents" if scope["kind"] == "all"
+                               else "All apps" if scope["kind"] == "all"
                                else agents.get(scope["key"], scope["key"]) if scope["kind"] == "agent"
+                               else f"{len(scope['keys'])} models" + (" · selection unavailable" if missing else "")
+                               if scope["kind"] == "models"
                                else f"{agents.get(model['runtime'], model['runtime'])} · {model_label(model['model'])}"
                                if model else "Model unavailable")
         if goal["metric"] == "spend" and goal["period"] == "month" and scope["kind"] in ("all", "agent"):
@@ -792,17 +909,18 @@ def project(raw, rows, agents, metric_available, git_query, active_keys, budgets
             if reference > 0:
                 item["budget_reference"] = reference
         goals.append(item)
-    observed = sorted({row.get("provider") for row in rows if row.get("provider") in agents})
+    observed = sorted({row.get("provider") for row in rows if row.get("provider") in agents}
+                      | {goal["scope"]["key"] for goal in store["items"] if goal["scope"]["kind"] == "agent"})
     return {"ok": True, "today": today.isoformat(), "goals": goals, "dropped": store["dropped"],
             "budget_allocations": allocations,
             "metrics": {key: {"label": value["label"], "unit": value["unit"], "scopes": list(value["scopes"]),
-                              "direction": value.get("direction"),
+                              "direction": value.get("direction"), "cumulative": value.get("cumulative", False),
                               "options": [{"id": o[0], "label": o[1], "comparison": o[2]}
                                           for o in TARGET_OPTIONS[key]]}
                         for key, value in METRICS.items()},
             "agents": [{"id": agent, "label": agents[agent]} for agent in observed],
-            "models": _model_choices(rows, inventory, agents, store["items"], today),
-            "model_spend_days": MODEL_SPEND_DAYS}
+            **model_choices(rows, inventory, agents, store["items"], today),
+            "model_spend_days": MODEL_SPEND_DAYS, "max_selected_models": MAX_SELECTED_MODELS}
 
 
 HIGH_EFFORTS = ("high", "xhigh", "ultra", "max")
@@ -813,8 +931,9 @@ MAX_DRIVERS = 8
 def _scoped_daily(row, scope, start, end):
     daily = [d for d in row.get("_model_daily") or [] if isinstance(d, dict)
              and start <= str(d.get("day") or "") <= end]
-    if scope["kind"] == "model":
-        daily = [d for d in daily if str(d.get("model") or "") == scope.get("model")]
+    models = _row_models(row, scope)
+    if models is not None:
+        daily = [d for d in daily if str(d.get("model") or "") in models]
     return daily
 
 
@@ -826,15 +945,46 @@ def drivers(metric, scope, start, end, rows, metric_available, agents, git_query
     """Ranked breakdowns of what produced a goal's value in its window."""
     if metric == "cost_per_1k_lines":
         data = git_query(scope, start, end) if git_query else {"ok": False}
-        repos = []
-        for row in data.get("project_rows") or [] if data.get("ok") else []:
-            availability = row.get("availability") or {}
-            if availability.get("cost") and availability.get("code_pushed"):
-                lines, cost = _count(row.get("changed_lines")), _nonnegative(row.get("covered_cost"))
-                repos.append({"label": str(row.get("project") or "").split(" · ", 1)[0], "lines": lines,
-                              "cost": cost, "value": 1000 * cost / lines if lines else None})
+        repos = [_delivery_repository(row) for row in _delivery_repositories(data)]
         repos.sort(key=lambda repo: -repo["cost"])
-        return {"by_repository": repos[:MAX_DRIVERS]}
+        coverage = []
+        for row in (data.get("project_rows") or [])[:MAX_QUERY_PROJECTS] if data.get("ok") else []:
+            availability = row.get("availability") or {}
+            coverage.append({"label": model_label(str(row.get("project") or "")),
+                             "cost": _nonnegative(row.get("covered_cost")), "lines": _count(row.get("changed_lines")),
+                             "availability": {key: bool(availability.get(key))
+                                              for key in ("cost", "code_pushed", "partial")}})
+        scan = data.get("coverage") or {}
+        return {"by_repository": repos[:MAX_DRIVERS], "repository_coverage": {
+            "rows": coverage, "omitted": max(0, len(repos) - MAX_DRIVERS),
+            "included": len(repos), "discovered": _count(scan.get("selected_repositories", len(coverage))),
+            "repository_limit": MAX_REPOSITORIES,
+            "limits": [code for code in ("repository_limit", "scan_limited", "no_push_history")
+                       if code in (scan.get("codes") or [])],
+            "stale": bool(data.get("stale")), "available": bool(data.get("ok")),
+            "start": start, "end": end}}
+    token_drivers = None
+    if metric == "tokens":
+        by_model, by_app = {}, {}
+        for row in rows:
+            if not _in_scope(row, scope):
+                continue
+            for daily in _scoped_daily(row, scope, start, end):
+                tokens = _daily_tokens(daily, metric_available(row, "tokens"))
+                if tokens is None:
+                    continue
+                runtime, name = row.get("provider"), str(daily.get("model") or "unknown")
+                by_model[(runtime, name)] = by_model.get((runtime, name), 0) + tokens
+                by_app[runtime] = by_app.get(runtime, 0) + tokens
+        total_tokens = sum(by_model.values())
+        token_drivers = {"total": total_tokens, "by_model": [
+            {"label": f"{agents.get(runtime, runtime)} · {model_label(name)}", "tokens": tokens,
+             "share": tokens * 100 / total_tokens if total_tokens else 0}
+            for (runtime, name), tokens in sorted(by_model.items(), key=lambda item: -item[1])[:MAX_DRIVERS]],
+            "by_agent": [{"label": agents.get(runtime, runtime), "tokens": tokens,
+                          "share": tokens * 100 / total_tokens if total_tokens else 0}
+                         for runtime, tokens in sorted(by_app.items(), key=lambda item: -item[1])],
+            "omitted": max(0, len(by_model) - MAX_DRIVERS)}
     models, efforts, by_agent = {}, {}, {}
     cache_read = processed_input = 0
     for row in rows:
@@ -892,12 +1042,13 @@ def drivers(metric, scope, start, end, rows, metric_available, agents, git_query
         effort_totals[effort] = effort_totals.get(effort, 0.0) + item["cost"]
     effort_total = sum(effort_totals.values())
     return {
+        "token_drivers": token_drivers,
         "total_cost": total,
         "by_model": by_model[:MAX_DRIVERS],
         "by_agent": sorted(({"label": agents.get(runtime, runtime), "cost": cost,
                              "share": cost * 100 / total if total else 0.0}
                             for runtime, cost in by_agent.items()), key=lambda item: -item["cost"])
-        if scope["kind"] == "all" else [],
+        if scope["kind"] in ("all", "models") else [],
         "by_effort": [{"effort": effort, "cost": effort_totals[effort],
                        "share": effort_totals[effort] * 100 / effort_total if effort_total else 0.0}
                       for effort in EFFORT_ORDER if effort in effort_totals],
@@ -908,8 +1059,18 @@ def drivers(metric, scope, start, end, rows, metric_available, agents, git_query
     }
 
 
-def contributors(metric, scope, start, end, rows, metric_available, agents, limit=5):
+def contributors(metric, scope, start, end, rows, metric_available, agents, limit=5, git_query=None):
     """The sessions that moved a goal's number most in its window; insight only, never scope."""
+    if metric == "cost_per_1k_lines":
+        data = git_query(scope, start, end) if git_query else {"ok": False}
+        items = [_delivery_repository(row) for row in _delivery_repositories(data)]
+        total = sum(item["cost"] for item in items)
+        lines = sum(item["lines"] for item in items)
+        items.sort(key=lambda item: (-item["cost"], item["label"]))
+        for item in items:
+            item["share"] = item["cost"] * 100 / total if total else None
+        return {"items": items[:limit], "repositories": len(items), "basis": "covered spend",
+                "total_cost": total, "total_lines": lines, "start": start, "end": end}
     items = []
     for row in rows:
         if not _in_scope(row, scope):
@@ -925,8 +1086,9 @@ def contributors(metric, scope, start, end, rows, metric_available, agents, limi
         top = max(by_model, key=by_model.get)
         cost = sum(by_model.values()) if cost_known else None
         input_tokens = sum(_count(d.get("input_tokens")) for d in daily)
+        tokens = sum(_daily_tokens(d, metric_available(row, "tokens")) or 0 for d in daily)
         reasoning = sum(_count(d.get("reasoning_tokens")) for d in daily)
-        weight = {"context_load": input_tokens, "reasoning_ratio": reasoning}.get(metric, cost or 0)
+        weight = {"context_load": input_tokens, "reasoning_ratio": reasoning, "tokens": tokens}.get(metric, cost or 0)
         if not weight:
             continue
         items.append({"id": str(row.get("id") or "")[:240],
@@ -935,13 +1097,14 @@ def contributors(metric, scope, start, end, rows, metric_available, agents, limi
                       "effort": session_model_reasoning_efforts(row, _model_names(row)).get(top),
                       "last_day": max(str(d.get("day")) for d in daily),
                       "executions": sum(_count(d.get("executions")) for d in daily),
-                      "cost": cost, "input_tokens": input_tokens, "reasoning_tokens": reasoning, "weight": weight})
+                      "cost": cost, "input_tokens": input_tokens, "reasoning_tokens": reasoning,
+                      "tokens": tokens, "weight": weight})
     total = sum(item["weight"] for item in items)
     items.sort(key=lambda item: -item["weight"])
     for item in items:
         item["share"] = item["weight"] * 100 / total if total else 0.0
     return {"items": items[:limit], "sessions": len(items),
-            "basis": {"context_load": "input tokens", "reasoning_ratio": "reasoning tokens"}.get(metric, "cost")}
+            "basis": {"context_load": "input tokens", "reasoning_ratio": "reasoning tokens", "tokens": "tokens"}.get(metric, "cost")}
 
 
 def goal_detail(raw, goal_id, rows, agents, metric_available, git_query, active_keys, budgets, today):
@@ -951,9 +1114,7 @@ def goal_detail(raw, goal_id, rows, agents, metric_available, git_query, active_
     item = next((goal for goal in data["goals"] if goal["id"] == goal_id), None)
     if item is None:
         raise ValueError("Goal was not found.")
-    scope = dict(item["scope"])
-    if scope["kind"] == "model":
-        scope.update(model_inventory(rows).get(scope["key"], {"runtime": None, "model": None}))
+    scope = _resolve_scope(item["scope"], model_inventory(rows))
     through = min(item["end"], today.isoformat())
     window = (item["start"], through) if through >= item["start"] else None
     return {"ok": True, "today": today.isoformat(), "goal": item, "metrics": data["metrics"],
@@ -961,7 +1122,8 @@ def goal_detail(raw, goal_id, rows, agents, metric_available, git_query, active_
                             points=MAX_PERIOD_DAYS) if window else [],
             "drivers": drivers(item["metric"], scope, *window, rows, metric_available, agents, git_query)
             if window else {},
-            "contributors": contributors(item["metric"], scope, *window, rows, metric_available, agents)
+            "contributors": contributors(item["metric"], scope, *window, rows, metric_available, agents,
+                                         git_query=git_query)
             if window else {"items": [], "sessions": 0, "basis": "cost"}}
 
 
@@ -973,6 +1135,7 @@ def native_summary(data, today):
             "items": [{"id": goal["id"], "metric": goal["metric"], "scope_kind": goal["scope"]["kind"],
                        "agent": goal["scope"]["key"] if goal["scope"]["kind"] == "agent" else None,
                        "model": goal["scope_label"].split(" · ", 1)[-1] if goal["scope"]["kind"] == "model" else None,
+                       "model_count": len(goal["scope"]["keys"]) if goal["scope"]["kind"] == "models" else None,
                        "value": goal["measurement"].get("value"), "target": goal["target"],
                        "comparison": goal["comparison"], "status": goal["status"],
                        "confidence": goal["measurement"].get("confidence"), "end": goal["end"]}
