@@ -56,11 +56,14 @@ for _metric in ("output_per_dollar", "context_load", "reasoning_ratio", "frontie
     TARGET_OPTIONS[_metric] += (("hold", "Hold current level",
                                 "at_least" if _metric == "output_per_dollar" else "at_most", "relative", 0),)
 
-STARTERS = (
-    ("Cut {agent} spend 10%", "spend", "codex", "cut_10"),
-    ("Improve {agent} Output / $", "output_per_dollar", "claude", "improve_15"),
-    ("Cut cost per 1K pushed lines 10%", "cost_per_1k_lines", None, "cut_10"),
-)
+PAGE_METRICS = {"spend": ("spend", "tokens"), "git": ("cost_per_1k_lines",)}
+DEFAULT_GOALS = (("spend", "spend"), ("git", "cost_per_1k_lines"),
+                 ("efficiency", "output_per_dollar"), ("efficiency", "context_load"))
+DEFAULT_KEYS = tuple(f"{page}:{metric}" for page, metric in DEFAULT_GOALS)
+
+
+def goal_page(metric):
+    return next((page for page, metrics in PAGE_METRICS.items() if metric in metrics), "efficiency")
 
 
 def session_key(row):
@@ -304,10 +307,16 @@ def normalize_store(raw, agents):
             continue
         items.append(clean)
         seen.add(clean["id"])
-    return {"items": items, "dropped": dropped}
+    marks = raw.get("seeded") if isinstance(raw, dict) and isinstance(raw.get("seeded"), list) else []
+    seeded = [key for key in dict.fromkeys(mark for mark in marks if isinstance(mark, str)) if key in DEFAULT_KEYS]
+    return {"items": items, "dropped": dropped, "seeded": seeded}
 
 
-def apply_action(raw, action, agents, model_keys, today):
+def _seed_pending(store):
+    return any(key not in store["seeded"] for key in DEFAULT_KEYS)
+
+
+def apply_action(raw, action, agents, model_keys, today, defaults=()):
     store = normalize_store(raw, agents)
     if not isinstance(action, dict):
         raise ValueError("A goal action is required.")
@@ -329,6 +338,16 @@ def apply_action(raw, action, agents, model_keys, today):
             store["items"][store["items"].index(old)] = record
         else:
             store["items"].append(record)
+    elif operation == "seed":
+        pages = {goal_page(goal["metric"]) for goal in store["items"]}
+        for key, page, record in defaults:
+            if key in store["seeded"]:
+                continue
+            if page in pages:
+                store["seeded"].append(key)
+            elif record is not None and len(store["items"]) < MAX_GOALS:
+                store["items"].append(normalize_goal(record, agents))
+                store["seeded"].append(key)
     elif operation in ("end", "delete"):
         if old is None:
             raise ValueError("Goal was not found.")
@@ -338,7 +357,7 @@ def apply_action(raw, action, agents, model_keys, today):
             store["items"].remove(old)
     else:
         raise ValueError("Choose a supported goal action.")
-    return {"items": store["items"]}
+    return {"items": store["items"], "seeded": store["seeded"]}
 
 
 def _local_day(value):
@@ -814,38 +833,20 @@ def _evaluate(goal, rows, metric_available, git_query, active_keys, today, cache
     return item
 
 
-def starters(rows, agents, metric_available, git_query, today, cache=None):
-    """Pratik's three starters, falling back to the highest spend agent with a usable baseline."""
+def default_goals(rows, metric_available, git_query, today, cache=None):
+    """Hold-current-level monthly defaults; a default without a usable baseline is None and waits."""
     cache = {} if cache is None else cache
     start, end = period_window("month", today)
-    first, last = baseline_window("month", start, end)
-    spend = {agent: measure("spend", {"kind": "agent", "key": agent}, first.isoformat(), last.isoformat(),
-                            rows, metric_available, cache=cache)["value"] or 0 for agent in agents}
-    ranked = sorted((agent for agent in agents if spend[agent] > 0), key=lambda agent: -spend[agent])
+    scope = {"kind": "all", "key": ""}
     result = []
-    for template, metric, preferred, option_id in STARTERS:
-        candidates = ([{"kind": "all", "key": ""}] if preferred is None else
-                      [{"kind": "agent", "key": agent}
-                       for agent in dict.fromkeys([preferred, *ranked]) if agent in agents])
-        chosen, first_reason = None, ""
-        for scope in candidates:
-            prior = baseline(metric, scope, "month", start, end, rows, metric_available, git_query, today, cache)
-            option = next((o for o in target_options(metric, prior["value"]) if o["id"] == option_id), None)
-            if option:
-                chosen = (scope, prior, option)
-                break
-            first_reason = first_reason or prior["reason"]
-        scope = chosen[0] if chosen else (candidates[0] if candidates else {"kind": "all", "key": ""})
-        title = template.format(agent=agents.get(scope["key"], "")) if scope["kind"] == "agent" else template
-        result.append({
-            "title": title, "metric": metric, "scope": scope, "period": "month",
-            "start": start.isoformat(), "end": end.isoformat(), "enabled": chosen is not None,
-            "target_option": option_id,
-            "comparison": chosen[2]["comparison"] if chosen else None,
-            "target": chosen[2]["target"] if chosen else None,
-            "baseline": chosen[1] if chosen else None,
-            "reason": f"Based on {chosen[1]['label'].lower()}" if chosen else f"Unavailable: {first_reason or 'no data'}",
-        })
+    for page, metric in DEFAULT_GOALS:
+        prior = baseline(metric, scope, "month", start, end, rows, metric_available, git_query, today, cache)
+        option = next((o for o in target_options(metric, prior["value"]) if o["id"] == "hold"), None)
+        record = None if option is None else {
+            "metric": metric, "scope": scope, "comparison": option["comparison"], "target": option["target"],
+            "target_option": "hold", "period": "month", "start": start.isoformat(), "end": end.isoformat(),
+            "repeat": True, "title": None}
+        result.append((f"{page}:{metric}", page, record))
     return result
 
 
@@ -912,6 +913,7 @@ def project(raw, rows, agents, metric_available, git_query, active_keys, budgets
     observed = sorted({row.get("provider") for row in rows if row.get("provider") in agents}
                       | {goal["scope"]["key"] for goal in store["items"] if goal["scope"]["kind"] == "agent"})
     return {"ok": True, "today": today.isoformat(), "goals": goals, "dropped": store["dropped"],
+            "seed_pending": _seed_pending(store),
             "budget_allocations": allocations,
             "metrics": {key: {"label": value["label"], "unit": value["unit"], "scopes": list(value["scopes"]),
                               "direction": value.get("direction"), "cumulative": value.get("cumulative", False),

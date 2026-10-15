@@ -144,17 +144,24 @@ are labeled upper bounds that assume the cheaper option could do the work, and
 can overlap, so the view says not to add them together. When no rule fires the
 view says that no single lever stands out.
 
-## Starters
+## Pages and default goals
 
-Cut Codex spend 10%, Improve Claude Output / $, and Cut cost per 1K pushed
-lines 10% use This month and last month as the baseline. **Add** saves the starter in
-one click with an Undo notice; **Customize** opens it in the form. When the named
-agent has no usable baseline, the starter switches to the highest spend agent
-that has one; otherwise it shows why it is unavailable.
+Each goal shows only on its page: spend and token goals on Spend, cost per 1K
+pushed lines on Git, and the ratio metrics on Efficiency. Each page's New goal
+offers only that page's metrics.
+
+There are no suggestions. Instead, the dashboard sends one action-token
+`seed` action; it adds monthly, repeating, all-apps defaults that hold last
+month's level: Spend at most last month, cost per 1K lines at most last month,
+and Output / $ at least and Context load at most last month. Each default is
+added at most once and recorded in `goals.seeded`, so a deleted default never
+returns. A page that already has any goal is marked seeded without adding one,
+and a default without a usable baseline waits until one exists. A seed that
+changes nothing does not write settings.
 
 ## Records and privacy
 
-Goals are stored under `goals.items` in local settings through the locked
+Goals are stored under `goals.items` (with `goals.seeded`) in local settings through the locked
 atomic settings write; at most 50 are kept. Records from the earlier prototype
 (business objectives, Model Mix, daily and model limits) are counted and
 dropped on the next save; reading never fails because of them. Monthly budgets

@@ -134,7 +134,7 @@ from token_meter.services.goals import (
     normalize_store as normalize_goal_store,
     model_inventory as goal_model_inventory,
     session_key as goal_session_key,
-    starters as goal_starters,
+    default_goals as default_goal_records,
     goal_detail as goal_detail_measurement,
 )
 from token_meter.services.goal_coaching import coach as coach_goal
@@ -1898,18 +1898,14 @@ def _prepare_goal_evidence(rows, service):
     return goal_model_inventory(rows), git_query
 
 
-def build_goals(raw, *, cross=None, include_starters=True, detail=True, today=None):
+def build_goals(raw, *, cross=None, detail=True, today=None):
     today = today or datetime.date.today()
     cross = cross if cross is not None else cross_session()
     rows, active, _models, git_query = goal_evidence(cross)
     agents = goal_agents()
     cache = {}
-    result = project_goals(raw, rows, agents, metric_available, git_query, active,
-                           budget_settings(), today, detail=detail, cache=cache)
-    if include_starters:
-        observed = {agent["id"]: agent["label"] for agent in result["agents"]}
-        result["starters"] = goal_starters(rows, observed, metric_available, git_query, today, cache)
-    return result
+    return project_goals(raw, rows, agents, metric_available, git_query, active,
+                         budget_settings(), today, detail=detail, cache=cache)
 
 
 def goals_state(params=None):
@@ -1946,14 +1942,19 @@ def set_goals_action(action, path=None):
     path = path or TOKEN_METER_SETTINGS
     today = datetime.date.today()
     try:
-        _rows, _active, models, _git_query = goal_evidence(cross_session())
+        rows, _active, models, git_query = goal_evidence(cross_session())
+        seeding = isinstance(action, dict) and action.get("operation") == "seed"
+        defaults = default_goal_records(rows, metric_available, git_query, today) if seeding else ()
         with _budget_settings_lock(path):
             settings = load_json(path, {})
             if not isinstance(settings, dict):
                 settings = {}
-            updated = apply_goal_action(settings.get("goals"), action, goal_agents(), models, today)
-            settings["goals"] = updated
-            atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+            updated = apply_goal_action(settings.get("goals"), action, goal_agents(), models, today,
+                                        defaults=defaults)
+            before = normalize_goal_store(settings.get("goals"), goal_agents())
+            if not seeding or (updated["items"], updated["seeded"]) != (before["items"], before["seeded"]):
+                settings["goals"] = updated
+                atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     except ValueError as error:
         return {"ok": False, "error": str(error)}
     except (OSError, sqlite3.Error):
@@ -1995,7 +1996,7 @@ def refresh_goal_cache():
     try:
         raw = goal_settings()
         items = raw.get("items") if isinstance(raw, dict) else None
-        native = (native_goal_summary(build_goals(raw, cross=cross, include_starters=False,
+        native = (native_goal_summary(build_goals(raw, cross=cross,
                                                   detail=False, today=today), today)
                   if items else {"ready": True, "items": [], "additional_count": 0})
     # The watcher thread must survive a goal evaluation failure; goals are optional.

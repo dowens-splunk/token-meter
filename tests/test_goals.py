@@ -187,12 +187,65 @@ class GoalStoreTests(unittest.TestCase):
             goals.normalize_goal(goal("spend", 10, end="2026-10-30"), AGENTS)
 
 
-class GoalStarterTests(unittest.TestCase):
-    def test_starter_falls_back_to_highest_spend_agent(self):
-        rows = [session("codex", "1", [day("gpt-5.6-sol", "2026-09-10", 30.0, 3000)])]
-        starter = goals.starters(rows, AGENTS, available, None, TODAY)[1]
-        self.assertEqual(starter["title"], "Improve Codex Output / $")
-        self.assertAlmostEqual(starter["target"], 115.0)
+class GoalDefaultTests(unittest.TestCase):
+    ROWS = [session("codex", "1", [day("gpt-5.6-sol", "2026-09-10", 30.0, 3000, input_tokens=9000)])]
+
+    def seed(self, raw):
+        defaults = goals.default_goals(self.ROWS, available, None, TODAY)
+        return goals.apply_action(raw, {"operation": "seed"}, AGENTS, set(), TODAY, defaults=defaults)
+
+    def test_seed_adds_simple_monthly_defaults_for_each_page_once(self):
+        store = self.seed({})
+        self.assertEqual({g["metric"] for g in store["items"]}, {"spend", "output_per_dollar", "context_load"})
+        self.assertTrue(all(g["period"] == "month" and g["repeat"] and g["target_option"] == "hold"
+                            and g["scope"]["kind"] == "all" and g["title"] is None for g in store["items"]))
+        self.assertEqual(sorted(store["seeded"]),
+                         ["efficiency:context_load", "efficiency:output_per_dollar", "spend:spend"])
+        again = self.seed(store)
+        self.assertEqual([g["id"] for g in again["items"]], [g["id"] for g in store["items"]])
+
+    def test_deleted_default_is_not_recreated(self):
+        store = self.seed({})
+        spend_id = next(g["id"] for g in store["items"] if g["metric"] == "spend")
+        store = goals.apply_action(store, {"operation": "delete", "id": spend_id}, AGENTS, set(), TODAY)
+        self.assertNotIn("spend", {g["metric"] for g in self.seed(store)["items"]})
+
+    def test_seed_skips_pages_that_already_have_goals(self):
+        store = self.seed({"items": [goal("reasoning_ratio", 10, ended_at="2026-10-05")]})
+        self.assertEqual(sorted(g["metric"] for g in store["items"]), ["reasoning_ratio", "spend"])
+        self.assertIn("efficiency:output_per_dollar", store["seeded"])
+
+    def test_existing_pages_are_recorded_so_emptying_them_later_adds_nothing(self):
+        raw = {"items": [goal("spend", 10), goal("cost_per_1k_lines", 20, id="b" * 32),
+                         goal("output_per_dollar", 100, "at_least", id="c" * 32)]}
+        self.assertTrue(goals.project(raw, self.ROWS, AGENTS, available, None, set(), {}, TODAY,
+                                      detail=False)["seed_pending"])
+        store = self.seed(raw)
+        store = goals.apply_action(store, {"operation": "delete", "id": "a" * 32}, AGENTS, set(), TODAY)
+        self.assertNotIn("spend", {g["metric"] for g in self.seed(store)["items"]})
+
+    def test_unavailable_baseline_waits_and_pending_reports_it(self):
+        store = self.seed({})
+        self.assertNotIn("git:cost_per_1k_lines", store["seeded"])
+        projected = goals.project(store, self.ROWS, AGENTS, available, None, set(), {}, TODAY, detail=False)
+        self.assertTrue(projected["seed_pending"])
+        self.assertNotIn("starters", projected)
+        done = goals.project({**store, "seeded": [*store["seeded"], "git:cost_per_1k_lines"]}, self.ROWS,
+                             AGENTS, available, None, set(), {}, TODAY, detail=False)
+        self.assertFalse(done["seed_pending"])
+
+    def test_saves_and_deletes_keep_the_seeded_record(self):
+        store = self.seed({})
+        draft = {k: v for k, v in goal("tokens", 10).items() if k not in ("id", "type", "created_at")}
+        saved = goals.apply_action(store, {"operation": "save", "goal": draft}, AGENTS, set(), TODAY)
+        removed = goals.apply_action(saved, {"operation": "delete", "id": saved["items"][0]["id"]},
+                                     AGENTS, set(), TODAY)
+        self.assertEqual(saved["seeded"], store["seeded"])
+        self.assertEqual(removed["seeded"], store["seeded"])
+
+    def test_store_keeps_only_known_seeded_keys(self):
+        store = goals.normalize_store({"items": [], "seeded": ["spend:spend", "bogus", 4, "spend:spend"]}, AGENTS)
+        self.assertEqual(store["seeded"], ["spend:spend"])
 
     def test_native_summary_has_no_titles(self):
         data = {"ok": True, "goals": [{**goal("spend", 10, title="Private name"), "status": "on_track",
@@ -536,6 +589,22 @@ class GoalApplicationTests(unittest.TestCase):
         self.assertEqual(len(stored["goals"]["items"]), 1)
         self.assertEqual(stored["budgets"]["allocations"]["codex"], 300.0)
 
+    def test_seed_writes_defaults_once_and_skips_unchanged_writes(self):
+        rows = GoalDefaultTests.ROWS
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "settings.json")
+            with mock.patch.object(meter, "cross_session", return_value={}), \
+                    mock.patch.object(meter, "goal_evidence",
+                                      return_value=(rows, set(), {}, lambda scope, start, end: {"ok": False})), \
+                    mock.patch.object(meter, "atomic_write_text", wraps=meter.atomic_write_text) as write:
+                first = meter.set_goals_action({"operation": "seed"}, path)
+                second = meter.set_goals_action({"operation": "seed"}, path)
+            stored = json.loads(Path(path).read_text())
+        self.assertTrue(first["ok"] and second["ok"])
+        self.assertEqual(write.call_count, 1)
+        self.assertEqual(len(stored["goals"]["items"]), 3)
+        self.assertTrue(first["seed_pending"])
+
     def test_invalid_goal_is_rejected_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
@@ -575,8 +644,9 @@ class GoalApplicationTests(unittest.TestCase):
         swift = (root / "menubar" / "TokenMeterMenuBar.swift").read_text()
         tray = (root / "menubar" / "token_meter_tray.py").read_text()
         for marker in ("id=efficiency-goals", "if(h==='goals')setHashRoute('efficiency-goals'",
-                       "data-goal-new=spend", "data-goal-new=cost_per_1k_lines",
-                       "data-goal-starter-add", "data-goal-undo", "id=goals-repeat", "id=goal-detail",
+                       "data-goal-new=spend-goals", "data-goal-new=git-goals", "data-goal-new=efficiency-goals",
+                       "filter(([id])=>goalHome(id).section===section)",
+                       "seedDefaultGoals()", "id=goals-repeat", "id=goal-detail",
                        "id=goals-model-picker", "id=goals-trend-chart", "Lines pushed", "aria-describedby=goals-trend-status",
                        "h.startsWith('efficiency-goals/')", "class=goalTitleLink", "aria-pressed=${goalDraft.option===id"):
             self.assertIn(marker, page)
